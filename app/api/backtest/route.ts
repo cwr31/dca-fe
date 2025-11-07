@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 
 interface FundData {
   date: string;
-  netValue: number;
-  cumulativeNetValue: number;
+  netValue: number;  // 单位净值，用于计算申购份额和当前市值
+  cumulativeNetValue: number;  // 累计净值，仅用于计算分红金额
 }
 
 interface BacktestParams {
@@ -20,15 +20,25 @@ function calculateDCA(params: BacktestParams) {
   
   const results: Array<{
     date: string;
-    price: number;
+    price: number;  // 单位净值，用于显示
+    cumulativePrice: number; // 累计净值，仅用于计算分红
     totalInvestment: number;
     totalShares: number;
     averageCost: number;
+    currentValue: number;  // 当前市值（份额 × 单位净值）
   }> = [];
 
   let totalInvestment = 0;
   let totalShares = 0;
   let lastInvestmentDate: Date | null = null;
+  let previousDataPoint: FundData | null = null; // 用于计算分红
+  const investmentRecords: Array<{
+    date: string;
+    type: '定投' | '分红再投';
+    netValue: number;
+    investmentAmount: number;
+    shares: number;
+  }> = [];
 
   // 按日期排序
   const sortedData = [...fundData].sort((a, b) => 
@@ -90,26 +100,69 @@ function calculateDCA(params: BacktestParams) {
 
     // 判断是否需要定投
     if (shouldInvest(currentDate, lastInvestmentDate)) {
-      // 执行定投
+      // 执行定投 - 使用单位净值计算份额（基金申购按单位净值计算）
       const shares = investmentAmount / dataPoint.netValue;
       totalInvestment += investmentAmount;
       totalShares += shares;
       lastInvestmentDate = currentDate;
+      
+      // 记录每次定投的详细信息
+      investmentRecords.push({
+        date: dataPoint.date,
+        type: '定投',
+        netValue: dataPoint.netValue,
+        investmentAmount: investmentAmount,
+        shares: shares,
+      });
     }
 
-    // 计算平均成本
+    // 检测并处理分红再投
+    // 分红价值 = 持有份额 × ((累计净值变化) - (单位净值变化))
+    // 分红再投：将分红金额按单位净值转换为份额
+    if (previousDataPoint && totalShares > 0) {
+      const cumulativeNetValueChange = dataPoint.cumulativeNetValue - previousDataPoint.cumulativeNetValue;
+      const netValueChange = dataPoint.netValue - previousDataPoint.netValue;
+      const dividendValue = totalShares * (cumulativeNetValueChange - netValueChange);
+      
+      // 如果检测到分红（差值大于0），进行分红再投
+      if (dividendValue > 0.0001) { // 使用小阈值避免浮点数误差
+        // 分红再投：将分红金额按单位净值转换为份额
+        const dividendShares = dividendValue / dataPoint.netValue;
+        totalShares += dividendShares;
+        // 注意：分红再投不增加totalInvestment，因为这是用分红金额再投资
+        
+        // 记录分红再投的详细信息
+        investmentRecords.push({
+          date: dataPoint.date,
+          type: '分红再投',
+          netValue: dataPoint.netValue,
+          investmentAmount: dividendValue, // 分红金额
+          shares: dividendShares, // 分红再投获得的份额
+        });
+      }
+    }
+
+    // 更新前一个数据点
+    previousDataPoint = dataPoint;
+
+    // 计算平均成本（基于投资金额和份额）
     const averageCost = totalShares > 0 ? totalInvestment / totalShares : 0;
+    
+    // 计算当前市值 - 使用单位净值（当前份额价值 = 份额 × 单位净值）
+    const currentValue = totalShares * dataPoint.netValue;
 
     results.push({
       date: dataPoint.date,
-      price: dataPoint.netValue,
+      price: dataPoint.netValue, // 单位净值，用于显示
+      cumulativePrice: dataPoint.cumulativeNetValue, // 累计净值，仅用于计算分红
       totalInvestment,
       totalShares,
-      averageCost: averageCost || dataPoint.netValue, // 如果没有投资，使用当前价格
+      averageCost: averageCost || dataPoint.netValue, // 如果没有投资，使用单位净值
+      currentValue, // 当前市值
     });
   }
 
-  return results;
+  return { results, investmentRecords };
 }
 
 export async function POST(request: NextRequest) {
@@ -147,7 +200,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const results = calculateDCA({
+    const { results, investmentRecords } = calculateDCA({
       fundData,
       investmentAmount: parseFloat(investmentAmount),
       frequency,
@@ -158,21 +211,26 @@ export async function POST(request: NextRequest) {
 
     // 计算统计信息
     const lastResult = results[results.length - 1];
-    const currentValue = lastResult.totalShares * lastResult.price;
-    const profit = currentValue - lastResult.totalInvestment;
-    const profitRate = (profit / lastResult.totalInvestment) * 100;
+    // 期末总资产 = 当前份额 × 单位净值
+    const finalTotalAssets = lastResult.currentValue;
+    // 投入总本金 = 累计定投金额（不包括分红再投，因为分红再投是用分红金额再投资）
+    const totalPrincipal = lastResult.totalInvestment;
+    // 定投收益率 = (期末总资产 - 投入总本金) / 投入总本金 × 100%
+    const profit = finalTotalAssets - totalPrincipal;
+    const profitRate = totalPrincipal > 0 ? (profit / totalPrincipal) * 100 : 0;
 
     return NextResponse.json({
       success: true,
       data: results,
+      investmentRecords: investmentRecords.reverse(), // 反转，最新的在前
       stats: {
-        totalInvestment: lastResult.totalInvestment,
+        totalInvestment: totalPrincipal, // 投入总本金
         totalShares: lastResult.totalShares,
-        currentValue,
+        currentValue: finalTotalAssets, // 期末总资产
         profit,
         profitRate,
         averageCost: lastResult.averageCost,
-        currentPrice: lastResult.price,
+        currentPrice: lastResult.price, // 使用单位净值作为当前价格
       },
     });
   } catch (error: any) {

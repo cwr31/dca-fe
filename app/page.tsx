@@ -2,17 +2,18 @@
 
 import { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { format, subYears } from 'date-fns';
+import { format, subYears, differenceInDays } from 'date-fns';
 
 interface FundData {
   date: string;
-  netValue: number;
-  cumulativeNetValue: number;
+  netValue: number;  // 单位净值，用于计算申购份额和当前市值
+  cumulativeNetValue: number;  // 累计净值，仅用于计算分红金额
 }
 
 interface BacktestResult {
   date: string;
-  price: number;
+  price: number; // 单位净值，用于显示
+  cumulativePrice: number; // 累计净值，仅用于计算分红
   totalInvestment: number;
   totalShares: number;
   averageCost: number;
@@ -51,7 +52,7 @@ function parseDateInput(input: string): string | null {
 
 export default function Home() {
   const [fundCode, setFundCode] = useState('');
-  const [investmentAmount, setInvestmentAmount] = useState('1000');
+  const [investmentAmount, setInvestmentAmount] = useState('100');
   const [frequency, setFrequency] = useState<'daily' | 'weekly' | 'monthly'>('monthly');
   const [weeklyDayOfWeek, setWeeklyDayOfWeek] = useState<number>(1); // 0=周日, 1=周一, ..., 6=周六
   const [startDateInput, setStartDateInput] = useState(''); // 用户输入的原始值
@@ -60,6 +61,7 @@ export default function Home() {
   const [error, setError] = useState('');
   const [chartData, setChartData] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
+  const [investmentRecords, setInvestmentRecords] = useState<any[]>([]);
 
   // 设置结束日期默认为今天
   useEffect(() => {
@@ -103,8 +105,9 @@ export default function Home() {
 
     setLoading(true);
     setError('');
-    setChartData([]);
-    setStats(null);
+      setChartData([]);
+      setStats(null);
+      setInvestmentRecords([]);
 
     try {
       // 获取基金数据（开始日期已确保必填）
@@ -151,16 +154,43 @@ export default function Home() {
 
       const backtestResult = await backtestResponse.json();
       const results: BacktestResult[] = backtestResult.data;
+      const records = backtestResult.investmentRecords || [];
 
-      // 准备图表数据
-      const formattedData = results.map((item) => ({
-        date: format(new Date(item.date), 'yyyy-MM-dd'),
-        price: Number(item.price.toFixed(4)),
-        averageCost: Number(item.averageCost.toFixed(4)),
-      }));
+      // 准备图表数据：显示累计投入金额和当前份额价值
+      const formattedData = results.map((item) => {
+        const totalInvestment = typeof item.totalInvestment === 'number' ? item.totalInvestment : parseFloat(item.totalInvestment) || 0;
+        const currentValue = typeof item.currentValue === 'number' ? item.currentValue : parseFloat(item.currentValue) || 0;
+        return {
+          date: format(new Date(item.date), 'yyyy-MM-dd'),
+          dateObj: new Date(item.date), // 保存日期对象用于计算
+          totalInvestment: Number(totalInvestment.toFixed(2)),  // 累计投入金额
+          currentValue: Number(currentValue.toFixed(2)),  // 当前份额价值（份额 × 单位净值）
+        };
+      });
+      
+      // 保存开始日期用于计算年化收益率
+      const startDateObj = new Date(actualStartDate);
 
-      // 计算Y轴范围，使图表更好地展示数据
-      const allValues = formattedData.flatMap(item => [item.price, item.averageCost]);
+      // 计算时间段的变化百分比（一次性投入收益率）
+      // 使用累计净值计算：从开始日期的累计净值到结束日期的累计净值的变化
+      let priceChangePercent = 0;
+      if (results.length > 0) {
+        const firstCumulativePrice = results[0].cumulativePrice;
+        const lastCumulativePrice = results[results.length - 1].cumulativePrice;
+        priceChangePercent = ((lastCumulativePrice - firstCumulativePrice) / firstCumulativePrice) * 100;
+      }
+
+      // 计算Y轴范围，使图表更好地展示数据（使用金额数据）
+      const allValues = formattedData.flatMap(item => [item.totalInvestment, item.currentValue]).filter(v => !isNaN(v) && isFinite(v));
+      if (allValues.length === 0) {
+        // 如果没有有效数据，使用默认范围
+        const yAxisDomain = [0, 1000];
+        setChartData(formattedData);
+        setStats({ ...backtestResult.stats, yAxisDomain, priceChangePercent });
+        setInvestmentRecords(records);
+        return;
+      }
+      
       const minValue = Math.min(...allValues);
       const maxValue = Math.max(...allValues);
       const range = maxValue - minValue;
@@ -173,7 +203,8 @@ export default function Home() {
       ];
 
       setChartData(formattedData);
-      setStats({ ...backtestResult.stats, yAxisDomain });
+      setStats({ ...backtestResult.stats, yAxisDomain, priceChangePercent, startDate: actualStartDate });
+      setInvestmentRecords(records);
     } catch (err: any) {
       setError(err.message || '发生错误');
       console.error(err);
@@ -187,21 +218,6 @@ export default function Home() {
       <div className="flex h-screen w-full">
         {/* 左侧参数设置面板 */}
         <div className="w-[340px] min-w-[340px] bg-gradient-to-b from-[#1a1a1a] to-[#151515] border-r border-[#2a2a2a] flex flex-col overflow-y-auto overflow-x-hidden custom-scrollbar shadow-2xl">
-          <div className="px-5 py-4 border-b border-[#2a2a2a] bg-gradient-to-r from-[#1e3a5f] via-[#1a1a1a] to-[#1a1a1a] relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-r from-[#4a9eff]/10 via-transparent to-transparent"></div>
-            <div className="relative z-10">
-              <div className="flex items-center gap-3 mb-1">
-                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#4a9eff] to-[#0066cc] flex items-center justify-center shadow-lg shadow-[#4a9eff]/30">
-                  <span className="text-xl">📈</span>
-                </div>
-                <h1 className="text-white text-xl font-bold bg-gradient-to-r from-white to-[#b0b0b0] bg-clip-text text-transparent">
-                  基金定投回测系统
-                </h1>
-              </div>
-              <p className="text-[#888] text-xs mt-1 ml-[52px]">智能分析 · 精准回测</p>
-            </div>
-          </div>
-
           <div className="px-5 py-4 flex-1 space-y-4">
             <div className="group">
               <label htmlFor="fundCode" className="block mb-2 text-[#b0b0b0] font-medium text-sm flex items-center gap-2">
@@ -425,17 +441,53 @@ export default function Home() {
                 <div className="grid grid-cols-2 gap-2.5">
                   <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] px-3 py-3 rounded-xl border border-[#2a2a2a] text-left hover:border-[#3a3a3a] transition-all duration-200 hover:shadow-lg hover:shadow-[#4a9eff]/5 group">
                     <div className="flex items-center justify-between mb-2">
-                      <div className="text-[#888] text-xs font-medium uppercase tracking-wide">累计投资</div>
-                      <span className="text-[#4a9eff] opacity-0 group-hover:opacity-100 transition-opacity">💰</span>
+                      <div className="text-[#888] text-xs font-medium uppercase tracking-wide">定投总期数</div>
+                      <span className="text-[#4a9eff] opacity-0 group-hover:opacity-100 transition-opacity">📊</span>
                     </div>
-                    <div className="text-white text-xl font-bold">¥{stats.totalInvestment.toFixed(2)}</div>
+                    <div className="text-white text-xl font-bold">{investmentRecords.length}期</div>
                   </div>
                   <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] px-3 py-3 rounded-xl border border-[#2a2a2a] text-left hover:border-[#3a3a3a] transition-all duration-200 hover:shadow-lg hover:shadow-[#4a9eff]/5 group">
                     <div className="flex items-center justify-between mb-2">
-                      <div className="text-[#888] text-xs font-medium uppercase tracking-wide">当前市值</div>
+                      <div className="text-[#888] text-xs font-medium uppercase tracking-wide">投入总本金（元）</div>
+                      <span className="text-[#4a9eff] opacity-0 group-hover:opacity-100 transition-opacity">💵</span>
+                    </div>
+                    <div className="text-white text-xl font-bold">¥{stats.totalInvestment.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                  </div>
+                  <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] px-3 py-3 rounded-xl border border-[#2a2a2a] text-left hover:border-[#3a3a3a] transition-all duration-200 hover:shadow-lg hover:shadow-[#4a9eff]/5 group">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-[#888] text-xs font-medium uppercase tracking-wide">期末总资产（元）</div>
+                      <span className="text-[#4a9eff] opacity-0 group-hover:opacity-100 transition-opacity">💰</span>
+                    </div>
+                    <div className="text-white text-xl font-bold">¥{stats.currentValue.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                  </div>
+                  <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] px-3 py-3 rounded-xl border border-[#2a2a2a] text-left hover:border-[#3a3a3a] transition-all duration-200 hover:shadow-lg hover:shadow-[#4a9eff]/5 group">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-[#888] text-xs font-medium uppercase tracking-wide">定投收益率</div>
+                      <span className={`opacity-0 group-hover:opacity-100 transition-opacity ${stats.profitRate >= 0 ? 'text-[#52c41a]' : 'text-[#ff4d4f]'}`}>
+                        {stats.profitRate >= 0 ? '📈' : '📉'}
+                      </span>
+                    </div>
+                    <div className={`text-xl font-bold ${stats.profitRate >= 0 ? 'text-[#52c41a]' : 'text-[#ff4d4f]'}`}>
+                      {stats.profitRate >= 0 ? '+' : ''}{stats.profitRate.toFixed(2)}%
+                    </div>
+                  </div>
+                  <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] px-3 py-3 rounded-xl border border-[#2a2a2a] text-left hover:border-[#3a3a3a] transition-all duration-200 hover:shadow-lg hover:shadow-[#4a9eff]/5 group">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-[#888] text-xs font-medium uppercase tracking-wide">当前份额</div>
                       <span className="text-[#4a9eff] opacity-0 group-hover:opacity-100 transition-opacity">📊</span>
                     </div>
-                    <div className="text-white text-xl font-bold">¥{stats.currentValue.toFixed(2)}</div>
+                    <div className="text-white text-xl font-bold">{stats.totalShares.toFixed(2)}</div>
+                  </div>
+                  <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] px-3 py-3 rounded-xl border border-[#2a2a2a] text-left hover:border-[#3a3a3a] transition-all duration-200 hover:shadow-lg hover:shadow-[#4a9eff]/5 group">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-[#888] text-xs font-medium uppercase tracking-wide">一次性投入收益率</div>
+                      <span className={`opacity-0 group-hover:opacity-100 transition-opacity ${stats.priceChangePercent >= 0 ? 'text-[#52c41a]' : 'text-[#ff4d4f]'}`}>
+                        {stats.priceChangePercent >= 0 ? '📈' : '📉'}
+                      </span>
+                    </div>
+                    <div className={`text-xl font-bold ${stats.priceChangePercent >= 0 ? 'text-[#52c41a]' : 'text-[#ff4d4f]'}`}>
+                      {stats.priceChangePercent >= 0 ? '+' : ''}{stats.priceChangePercent?.toFixed(2) || '0.00'}%
+                    </div>
                   </div>
                   <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] px-3 py-3 rounded-xl border border-[#2a2a2a] text-left hover:border-[#3a3a3a] transition-all duration-200 hover:shadow-lg hover:shadow-[#4a9eff]/5 group">
                     <div className="flex items-center justify-between mb-2">
@@ -448,31 +500,6 @@ export default function Home() {
                       {stats.profit >= 0 ? '+' : ''}¥{stats.profit.toFixed(2)}
                     </div>
                   </div>
-                  <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] px-3 py-3 rounded-xl border border-[#2a2a2a] text-left hover:border-[#3a3a3a] transition-all duration-200 hover:shadow-lg hover:shadow-[#4a9eff]/5 group">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="text-[#888] text-xs font-medium uppercase tracking-wide">收益率</div>
-                      <span className={`opacity-0 group-hover:opacity-100 transition-opacity ${stats.profitRate >= 0 ? 'text-[#52c41a]' : 'text-[#ff4d4f]'}`}>
-                        {stats.profitRate >= 0 ? '📈' : '📉'}
-                      </span>
-                    </div>
-                    <div className={`text-xl font-bold ${stats.profitRate >= 0 ? 'text-[#52c41a]' : 'text-[#ff4d4f]'}`}>
-                      {stats.profitRate >= 0 ? '+' : ''}{stats.profitRate.toFixed(2)}%
-                    </div>
-                  </div>
-                  <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] px-3 py-3 rounded-xl border border-[#2a2a2a] text-left hover:border-[#3a3a3a] transition-all duration-200 hover:shadow-lg hover:shadow-[#4a9eff]/5 group">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="text-[#888] text-xs font-medium uppercase tracking-wide">平均成本</div>
-                      <span className="text-[#4a9eff] opacity-0 group-hover:opacity-100 transition-opacity">⚖️</span>
-                    </div>
-                    <div className="text-white text-xl font-bold">¥{stats.averageCost.toFixed(4)}</div>
-                  </div>
-                  <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] px-3 py-3 rounded-xl border border-[#2a2a2a] text-left hover:border-[#3a3a3a] transition-all duration-200 hover:shadow-lg hover:shadow-[#4a9eff]/5 group">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="text-[#888] text-xs font-medium uppercase tracking-wide">当前价格</div>
-                      <span className="text-[#4a9eff] opacity-0 group-hover:opacity-100 transition-opacity">💎</span>
-                    </div>
-                    <div className="text-white text-xl font-bold">¥{stats.currentPrice.toFixed(4)}</div>
-                  </div>
                 </div>
               </div>
             )}
@@ -482,28 +509,15 @@ export default function Home() {
         {/* 右侧图表展示区域 */}
         <div className="flex-1 bg-gradient-to-br from-[#0f0f0f] via-[#0a0a0a] to-[#0f0f0f] flex flex-col relative overflow-hidden">
           {chartData.length > 0 ? (
-            <div className="w-full h-full flex flex-col p-6 animate-in fade-in duration-500">
-              <div className="flex justify-between items-center mb-6 pb-5 border-b border-[#2a2a2a]">
-                <div>
-                  <h2 className="text-white text-[24px] font-bold m-0 mb-1 bg-gradient-to-r from-white to-[#b0b0b0] bg-clip-text text-transparent">
-                    定投成本 vs 价格趋势
-                  </h2>
-                  <p className="text-[#666] text-xs mt-1">实时数据分析与可视化</p>
-                </div>
-                <div className="flex gap-6">
-                  <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-[#151515] border border-[#2a2a2a] hover:border-[#3a3a3a] transition-all">
-                    <span className="w-3.5 h-3.5 rounded-sm bg-gradient-to-br from-[#FFD700] to-[#FFA500] inline-block shadow-lg shadow-[#FFD700]/30"></span>
-                    <span className="text-[#b0b0b0] text-sm font-medium">基金净值</span>
-                  </div>
-                  <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-[#151515] border border-[#2a2a2a] hover:border-[#3a3a3a] transition-all">
-                    <span className="w-3.5 h-3.5 rounded-sm bg-gradient-to-br from-[#00CED1] to-[#008B8B] inline-block shadow-lg shadow-[#00CED1]/30"></span>
-                    <span className="text-[#b0b0b0] text-sm font-medium">定投成本</span>
-                  </div>
-                </div>
+            <div className="w-full h-full flex flex-col p-3 animate-in fade-in duration-500 overflow-hidden">
+              <div className="mb-2 pb-2 border-b border-[#2a2a2a] flex-shrink-0">
+                <h2 className="text-white text-[18px] font-bold m-0 bg-gradient-to-r from-white to-[#b0b0b0] bg-clip-text text-transparent">
+                  定投成本 vs 价格趋势
+                </h2>
               </div>
-              <div className="flex-1 min-h-0 bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl p-6 border border-[#2a2a2a] shadow-2xl">
+              <div className="flex-1 min-h-0 bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl p-4 border border-[#2a2a2a] shadow-2xl mb-2">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 80 }}>
+                  <LineChart data={chartData} margin={{ top: 5, right: 25, left: 15, bottom: 50 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#333" opacity={0.3} />
                     <XAxis 
                       dataKey="date" 
@@ -516,43 +530,166 @@ export default function Home() {
                       label={{ value: '时间', position: 'insideBottom', offset: -10, fill: '#999' }}
                     />
                     <YAxis 
-                      label={{ value: '净值', angle: -90, position: 'insideLeft', fill: '#999' }}
+                      label={{ value: '金额（元）', angle: -90, position: 'insideLeft', fill: '#999' }}
                       stroke="#999"
                       tick={{ fill: '#999', fontSize: 12 }}
                       domain={stats?.yAxisDomain || ['auto', 'auto']}
                       allowDataOverflow={false}
                     />
                     <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: 'rgba(20, 20, 20, 0.95)', 
-                        border: '1px solid #444',
-                        borderRadius: '6px',
-                        color: '#fff'
+                      content={({ active, payload, label }) => {
+                        if (!active || !payload || !payload.length) return null;
+                        
+                        const data = payload[0].payload;
+                        const totalInvestment = data.totalInvestment || 0;
+                        const currentValue = data.currentValue || 0;
+                        const currentDate = data.dateObj || new Date(data.date);
+                        const startDate = stats?.startDate ? new Date(stats.startDate) : currentDate;
+                        
+                        // 计算当前收益率
+                        const currentReturnRate = totalInvestment > 0 
+                          ? ((currentValue - totalInvestment) / totalInvestment) * 100 
+                          : 0;
+                        
+                        // 计算年化收益率
+                        const daysDiff = differenceInDays(currentDate, startDate);
+                        let annualizedReturnRate: number | null = null;
+                        if (daysDiff > 0 && totalInvestment > 0 && currentValue > 0) {
+                          const years = daysDiff / 365;
+                          if (years > 0) {
+                            const totalReturn = currentValue / totalInvestment;
+                            if (totalReturn > 0) {
+                              annualizedReturnRate = (Math.pow(totalReturn, 1 / years) - 1) * 100;
+                            }
+                          }
+                        }
+                        
+                        return (
+                          <div style={{
+                            backgroundColor: 'rgba(20, 20, 20, 0.95)',
+                            border: '1px solid #444',
+                            borderRadius: '6px',
+                            padding: '12px',
+                            color: '#fff'
+                          }}>
+                            <div style={{ marginBottom: '8px', fontWeight: 'bold', fontSize: '14px', borderBottom: '1px solid #444', paddingBottom: '6px' }}>
+                              日期: {label}
+                            </div>
+                            {payload.map((entry: any, index: number) => (
+                              <div key={index} style={{ marginBottom: '4px', fontSize: '13px' }}>
+                                <span style={{ color: entry.color, marginRight: '8px' }}>●</span>
+                                <span style={{ color: '#e0e0e0' }}>{entry.name}: </span>
+                                <span style={{ color: '#fff', fontWeight: 'bold' }}>¥{entry.value.toFixed(2)}</span>
+                              </div>
+                            ))}
+                            <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px solid #444' }}>
+                              <div style={{ marginBottom: '4px', fontSize: '13px' }}>
+                                <span style={{ color: '#888' }}>当前收益率: </span>
+                                <span style={{ 
+                                  color: currentReturnRate >= 0 ? '#52c41a' : '#ff4d4f',
+                                  fontWeight: 'bold'
+                                }}>
+                                  {currentReturnRate >= 0 ? '+' : ''}{currentReturnRate.toFixed(2)}%
+                                </span>
+                              </div>
+                              <div style={{ fontSize: '13px' }}>
+                                <span style={{ color: '#888' }}>年化收益率: </span>
+                                {annualizedReturnRate !== null ? (
+                                  <span style={{ 
+                                    color: annualizedReturnRate >= 0 ? '#52c41a' : '#ff4d4f',
+                                    fontWeight: 'bold'
+                                  }}>
+                                    {annualizedReturnRate >= 0 ? '+' : ''}{annualizedReturnRate.toFixed(2)}%
+                                  </span>
+                                ) : (
+                                  <span style={{ color: '#888' }}>--</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
                       }}
-                      formatter={(value: number) => value.toFixed(4)}
-                      labelFormatter={(label) => `日期: ${label}`}
+                    />
+                    <Legend 
+                      wrapperStyle={{ paddingTop: '10px' }}
+                      iconType="line"
+                      formatter={(value) => <span style={{ color: '#e0e0e0', fontSize: '14px' }}>{value}</span>}
                     />
                     <Line 
                       type="monotone" 
-                      dataKey="price" 
-                      stroke="#FFD700" 
-                      name="基金净值"
-                      strokeWidth={2.5}
-                      dot={false}
-                      activeDot={{ r: 6 }}
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="averageCost" 
+                      dataKey="totalInvestment" 
                       stroke="#00CED1" 
-                      name="定投成本"
-                      strokeWidth={2.5}
+                      name="累计投入金额"
+                      strokeWidth={3}
                       dot={false}
-                      activeDot={{ r: 6 }}
+                      activeDot={{ r: 8, fill: '#00CED1' }}
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="currentValue" 
+                      stroke="#FFD700" 
+                      name="当前份额价值"
+                      strokeWidth={3}
+                      dot={false}
+                      activeDot={{ r: 8, fill: '#FFD700' }}
                     />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
+              
+              {/* 定投记录表格 */}
+              {investmentRecords.length > 0 && (
+                <div className="bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl border border-[#2a2a2a] shadow-2xl overflow-hidden flex flex-col flex-shrink-0 h-[200px]">
+                  <div className="px-4 py-2 border-b border-[#2a2a2a] flex-shrink-0">
+                    <h3 className="text-white text-sm font-bold">定投记录</h3>
+                  </div>
+                  <div className="overflow-x-auto overflow-y-auto flex-1">
+                    <table className="w-full">
+                      <thead className="sticky top-0 z-10">
+                        <tr className="border-b border-[#2a2a2a] bg-[#1a1a1a]">
+                          <th className="px-4 py-2 text-left text-xs font-medium text-[#888] uppercase tracking-wider">日期</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-[#888] uppercase tracking-wider">类型</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-[#888] uppercase tracking-wider">单位净值</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-[#888] uppercase tracking-wider">金额</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-[#888] uppercase tracking-wider">份额</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#2a2a2a]">
+                        {investmentRecords.map((record: any, index: number) => {
+                          const date = new Date(record.date);
+                          const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+                          const weekday = weekdays[date.getDay()];
+                          return (
+                            <tr key={index} className="hover:bg-[#1f1f1f] transition-colors">
+                              <td className="px-4 py-2 whitespace-nowrap text-xs text-[#e0e0e0]">
+                                {format(date, 'yyyy-MM-dd')} {weekday}
+                              </td>
+                              <td className="px-4 py-2 whitespace-nowrap text-xs">
+                                <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                  record.type === '定投' 
+                                    ? 'bg-[#4a9eff]/20 text-[#4a9eff] border border-[#4a9eff]/30' 
+                                    : 'bg-[#52c41a]/20 text-[#52c41a] border border-[#52c41a]/30'
+                                }`}>
+                                  {record.type}
+                                </span>
+                              </td>
+                              <td className="px-4 py-2 whitespace-nowrap text-xs text-[#e0e0e0]">
+                                {record.netValue.toFixed(4)}
+                              </td>
+                              <td className="px-4 py-2 whitespace-nowrap text-xs text-[#e0e0e0]">
+                                {record.investmentAmount.toFixed(2)}
+                              </td>
+                              <td className="px-4 py-2 whitespace-nowrap text-xs text-[#e0e0e0]">
+                                {record.shares.toFixed(2)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#0f0f0f] via-[#0a0a0a] to-[#0f0f0f]">
