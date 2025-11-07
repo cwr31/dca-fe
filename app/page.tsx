@@ -17,6 +17,7 @@ interface BacktestResult {
   totalInvestment: number;
   totalShares: number;
   averageCost: number;
+  currentValue: number; // 当前市值（份额 × 单位净值）
 }
 
 // 日期解析函数：将用户输入转换为 YYYY-MM-DD 格式
