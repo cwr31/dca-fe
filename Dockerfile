@@ -2,9 +2,6 @@
 # 阶段1: 构建阶段
 FROM node:20-alpine AS builder
 
-# 安装 Python 3 和构建依赖
-RUN apk add --no-cache python3 py3-pip
-
 # 设置工作目录
 WORKDIR /app
 
@@ -13,12 +10,6 @@ COPY package.json package-lock.json* ./
 
 # 安装 Node.js 依赖
 RUN npm ci
-
-# 复制 Python 依赖文件
-COPY requirements.txt ./
-
-# 安装 Python 依赖
-RUN pip3 install --no-cache-dir -r requirements.txt
 
 # 复制项目文件
 COPY . .
