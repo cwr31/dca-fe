@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: '定投回测系统',
+  title: 'backtest',
   description: '基金定投回测工具',
 }
 
