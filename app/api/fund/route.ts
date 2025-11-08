@@ -19,8 +19,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // 构建 Python 脚本路径
-    const scriptPath = path.join(process.cwd(), 'scripts', 'get_fund_data.py');
+    // 使用绝对路径（Docker 容器中为 /app）
+    // 在 standalone 模式下，process.cwd() 可能不是 /app，所以使用环境变量或默认值
+    const appRoot = process.env.APP_ROOT || '/app';
+    const scriptPath = path.join(appRoot, 'scripts', 'get_fund_data.py');
     
     // 验证基金代码格式（防止命令注入）
     if (!/^[0-9]{6}$/.test(fundCode)) {
@@ -44,8 +46,8 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    // 使用 venv 环境中的 Python
-    const venvPython = process.env.VENV_PYTHON || path.join(process.cwd(), 'venv', 'bin', 'python');
+    // 使用 venv 环境中的 Python（优先使用环境变量）
+    const venvPython = process.env.VENV_PYTHON || path.join(appRoot, 'venv', 'bin', 'python');
     
     // 构建命令参数（使用数组形式更安全）
     const args = [venvPython, scriptPath, fundCode];
@@ -58,7 +60,7 @@ export async function GET(request: NextRequest) {
       timeout: 30000, // 30秒超时
       env: { 
         ...process.env, 
-        PATH: `${path.join(process.cwd(), 'venv', 'bin')}:${process.env.PATH}` 
+        PATH: `${path.join(appRoot, 'venv', 'bin')}:${process.env.PATH}` 
       }
     });
     

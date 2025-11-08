@@ -1,6 +1,6 @@
 # 多阶段构建 Dockerfile
 # 阶段1: 构建阶段
-FROM node:20-alpine AS builder
+FROM node:20 AS builder
 
 # 设置工作目录
 WORKDIR /app
@@ -21,17 +21,22 @@ RUN mkdir -p public
 RUN npm run build
 
 # 阶段2: 运行阶段
-FROM node:20-alpine AS runner
+FROM node:20 AS runner
 
-# 安装 Python 3 和 venv（运行时需要）
-RUN apk add --no-cache python3 py3-pip
+# 安装 Python 3、pip 和必要的系统依赖
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    python3 \
+    python3-pip \
+    python3-venv \
+    && rm -rf /var/lib/apt/lists/*
 
 # 设置工作目录
 WORKDIR /app
 
 # 创建非 root 用户
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs
+RUN groupadd --system --gid 1001 nodejs && \
+    useradd --system --uid 1001 --gid nodejs nextjs
 
 # 从构建阶段复制必要文件
 COPY --from=builder /app/public ./public
@@ -61,6 +66,7 @@ ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 ENV NODE_ENV=production
 ENV VENV_PYTHON=/app/venv/bin/python
+ENV APP_ROOT=/app
 
 # 启动应用
 CMD ["node", "server.js"]
