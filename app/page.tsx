@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { format, subYears, differenceInDays } from 'date-fns';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Brush, ReferenceLine } from 'recharts';
+import { format, subYears } from 'date-fns';
 
 interface FundData {
   date: string;
@@ -18,6 +18,9 @@ interface BacktestResult {
   totalShares: number;
   averageCost: number;
   currentValue: number; // 当前市值（份额 × 单位净值）
+  annualizedReturnRate?: number; // 从开始到该天的年化收益率
+  averageAnnualizedReturnRate?: number; // 从开始到该天的平均年化收益率
+  averageAnnualizedReturnRateForInterval?: number; // 区间内定投平均年化收益率（水平直线）
 }
 
 // 日期解析函数：将用户输入转换为 YYYY-MM-DD 格式
@@ -63,6 +66,9 @@ export default function Home() {
   const [chartData, setChartData] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [investmentRecords, setInvestmentRecords] = useState<any[]>([]);
+  const [chartView, setChartView] = useState<'cost' | 'return'>('cost'); // 图表视图：cost=成本收益视图, return=年化收益率视图
+  const [brushStartIndex, setBrushStartIndex] = useState<number>(0);
+  const [brushEndIndex, setBrushEndIndex] = useState<number>(0);
 
   // 设置结束日期默认为今天
   useEffect(() => {
@@ -157,20 +163,26 @@ export default function Home() {
       const results: BacktestResult[] = backtestResult.data;
       const records = backtestResult.investmentRecords || [];
 
-      // 准备图表数据：显示累计投入金额和当前份额价值
+      // 保存开始日期用于计算年化收益率
+      const startDateObj = new Date(actualStartDate);
+      
+      // 准备图表数据：显示累计投入金额和当前份额价值，以及收益率
       const formattedData = results.map((item) => {
         const totalInvestment = typeof item.totalInvestment === 'number' ? item.totalInvestment : parseFloat(item.totalInvestment) || 0;
         const currentValue = typeof item.currentValue === 'number' ? item.currentValue : parseFloat(item.currentValue) || 0;
+        const currentDate = new Date(item.date);
+        
         return {
           date: format(new Date(item.date), 'yyyy-MM-dd'),
-          dateObj: new Date(item.date), // 保存日期对象用于计算
+          dateObj: currentDate, // 保存日期对象用于计算
           totalInvestment: Number(totalInvestment.toFixed(2)),  // 累计投入金额
           currentValue: Number(currentValue.toFixed(2)),  // 当前份额价值（份额 × 单位净值）
+          // 收益率（百分比），直接使用，不转换为金额
+          annualizedReturnRate: item.annualizedReturnRate !== undefined && item.annualizedReturnRate !== null && isFinite(item.annualizedReturnRate) 
+            ? Number(item.annualizedReturnRate.toFixed(2)) 
+            : null, // 定投年化收益率（曲线，百分比）
         };
       });
-      
-      // 保存开始日期用于计算年化收益率
-      const startDateObj = new Date(actualStartDate);
 
       // 计算时间段的变化百分比（一次性投入收益率）
       // 使用累计净值计算：从开始日期的累计净值到结束日期的累计净值的变化
@@ -182,13 +194,25 @@ export default function Home() {
       }
 
       // 计算Y轴范围，使图表更好地展示数据（使用金额数据）
-      const allValues = formattedData.flatMap(item => [item.totalInvestment, item.currentValue]).filter(v => !isNaN(v) && isFinite(v));
+      const allValues = formattedData.flatMap(item => [
+        item.totalInvestment, 
+        item.currentValue
+      ]).filter((v): v is number => v !== null && !isNaN(v) && isFinite(v));
+      
+      // 计算收益率Y轴范围（右侧Y轴）
+      const allReturnRates = formattedData.flatMap(item => [
+        item.annualizedReturnRate
+      ]).filter((v): v is number => v !== null && !isNaN(v) && isFinite(v));
       if (allValues.length === 0) {
         // 如果没有有效数据，使用默认范围
         const yAxisDomain = [0, 1000];
+        const yAxisRightDomain = ['auto', 'auto'];
         setChartData(formattedData);
-        setStats({ ...backtestResult.stats, yAxisDomain, priceChangePercent });
+        setStats({ ...backtestResult.stats, yAxisDomain, yAxisRightDomain, priceChangePercent });
         setInvestmentRecords(records);
+        // 初始化缩放范围：显示全部数据
+        setBrushStartIndex(0);
+        setBrushEndIndex(formattedData.length > 0 ? formattedData.length - 1 : 0);
         return;
       }
       
@@ -202,10 +226,26 @@ export default function Home() {
         yAxisMin,
         maxValue + padding // 最大值加上边距
       ];
+      
+      // 计算收益率Y轴范围（右侧Y轴）
+      let yAxisRightDomain = ['auto', 'auto'];
+      if (allReturnRates.length > 0) {
+        const minRate = Math.min(...allReturnRates);
+        const maxRate = Math.max(...allReturnRates);
+        const rateRange = maxRate - minRate;
+        const ratePadding = rateRange * 0.1 || 5; // 10% 的边距，至少5%
+        yAxisRightDomain = [
+          minRate - ratePadding,
+          maxRate + ratePadding
+        ];
+      }
 
       setChartData(formattedData);
-      setStats({ ...backtestResult.stats, yAxisDomain, priceChangePercent, startDate: actualStartDate });
+      setStats({ ...backtestResult.stats, yAxisDomain, yAxisRightDomain, priceChangePercent, startDate: actualStartDate });
       setInvestmentRecords(records);
+      // 初始化缩放范围：显示全部数据
+      setBrushStartIndex(0);
+      setBrushEndIndex(formattedData.length > 0 ? formattedData.length - 1 : 0);
     } catch (err: any) {
       setError(err.message || '发生错误');
       console.error(err);
@@ -452,23 +492,23 @@ export default function Home() {
                       <div className="text-[#888] text-xs font-medium uppercase tracking-wide">投入总本金（元）</div>
                       <span className="text-[#4a9eff] opacity-0 group-hover:opacity-100 transition-opacity">💵</span>
                     </div>
-                    <div className="text-white text-xl font-bold">¥{stats.totalInvestment.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                    <div className="text-white text-xl font-bold">¥{Number(stats.totalInvestment.toFixed(2)).toLocaleString('zh-CN')}</div>
                   </div>
                   <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] px-3 py-3 rounded-xl border border-[#2a2a2a] text-left hover:border-[#3a3a3a] transition-all duration-200 hover:shadow-lg hover:shadow-[#4a9eff]/5 group">
                     <div className="flex items-center justify-between mb-2">
                       <div className="text-[#888] text-xs font-medium uppercase tracking-wide">期末总资产（元）</div>
                       <span className="text-[#4a9eff] opacity-0 group-hover:opacity-100 transition-opacity">💰</span>
                     </div>
-                    <div className="text-white text-xl font-bold">¥{stats.currentValue.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                    <div className="text-white text-xl font-bold">¥{Number(stats.currentValue.toFixed(2)).toLocaleString('zh-CN')}</div>
                   </div>
                   <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] px-3 py-3 rounded-xl border border-[#2a2a2a] text-left hover:border-[#3a3a3a] transition-all duration-200 hover:shadow-lg hover:shadow-[#4a9eff]/5 group">
                     <div className="flex items-center justify-between mb-2">
                       <div className="text-[#888] text-xs font-medium uppercase tracking-wide">定投收益率</div>
-                      <span className={`opacity-0 group-hover:opacity-100 transition-opacity ${stats.profitRate >= 0 ? 'text-[#52c41a]' : 'text-[#ff4d4f]'}`}>
+                      <span className={`opacity-0 group-hover:opacity-100 transition-opacity ${stats.profitRate >= 0 ? 'text-[#ff4d4f]' : 'text-[#52c41a]'}`}>
                         {stats.profitRate >= 0 ? '📈' : '📉'}
                       </span>
                     </div>
-                    <div className={`text-xl font-bold ${stats.profitRate >= 0 ? 'text-[#52c41a]' : 'text-[#ff4d4f]'}`}>
+                    <div className={`text-xl font-bold ${stats.profitRate >= 0 ? 'text-[#ff4d4f]' : 'text-[#52c41a]'}`}>
                       {stats.profitRate >= 0 ? '+' : ''}{stats.profitRate.toFixed(2)}%
                     </div>
                   </div>
@@ -477,28 +517,28 @@ export default function Home() {
                       <div className="text-[#888] text-xs font-medium uppercase tracking-wide">当前份额</div>
                       <span className="text-[#4a9eff] opacity-0 group-hover:opacity-100 transition-opacity">📊</span>
                     </div>
-                    <div className="text-white text-xl font-bold">{stats.totalShares.toFixed(2)}</div>
+                    <div className="text-white text-xl font-bold">{Number(stats.totalShares.toFixed(2))}</div>
                   </div>
                   <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] px-3 py-3 rounded-xl border border-[#2a2a2a] text-left hover:border-[#3a3a3a] transition-all duration-200 hover:shadow-lg hover:shadow-[#4a9eff]/5 group">
                     <div className="flex items-center justify-between mb-2">
                       <div className="text-[#888] text-xs font-medium uppercase tracking-wide">一次性投入收益率</div>
-                      <span className={`opacity-0 group-hover:opacity-100 transition-opacity ${stats.priceChangePercent >= 0 ? 'text-[#52c41a]' : 'text-[#ff4d4f]'}`}>
+                      <span className={`opacity-0 group-hover:opacity-100 transition-opacity ${stats.priceChangePercent >= 0 ? 'text-[#ff4d4f]' : 'text-[#52c41a]'}`}>
                         {stats.priceChangePercent >= 0 ? '📈' : '📉'}
                       </span>
                     </div>
-                    <div className={`text-xl font-bold ${stats.priceChangePercent >= 0 ? 'text-[#52c41a]' : 'text-[#ff4d4f]'}`}>
+                    <div className={`text-xl font-bold ${stats.priceChangePercent >= 0 ? 'text-[#ff4d4f]' : 'text-[#52c41a]'}`}>
                       {stats.priceChangePercent >= 0 ? '+' : ''}{stats.priceChangePercent?.toFixed(2) || '0.00'}%
                     </div>
                   </div>
                   <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] px-3 py-3 rounded-xl border border-[#2a2a2a] text-left hover:border-[#3a3a3a] transition-all duration-200 hover:shadow-lg hover:shadow-[#4a9eff]/5 group">
                     <div className="flex items-center justify-between mb-2">
                       <div className="text-[#888] text-xs font-medium uppercase tracking-wide">盈亏金额</div>
-                      <span className={`opacity-0 group-hover:opacity-100 transition-opacity ${stats.profit >= 0 ? 'text-[#52c41a]' : 'text-[#ff4d4f]'}`}>
+                      <span className={`opacity-0 group-hover:opacity-100 transition-opacity ${stats.profit >= 0 ? 'text-[#ff4d4f]' : 'text-[#52c41a]'}`}>
                         {stats.profit >= 0 ? '📈' : '📉'}
                       </span>
                     </div>
-                    <div className={`text-xl font-bold ${stats.profit >= 0 ? 'text-[#52c41a]' : 'text-[#ff4d4f]'}`}>
-                      {stats.profit >= 0 ? '+' : ''}¥{stats.profit.toFixed(2)}
+                    <div className={`text-xl font-bold ${stats.profit >= 0 ? 'text-[#ff4d4f]' : 'text-[#52c41a]'}`}>
+                      {stats.profit >= 0 ? '+' : ''}¥{Number(stats.profit.toFixed(2)).toLocaleString('zh-CN')}
                     </div>
                   </div>
                 </div>
@@ -511,14 +551,26 @@ export default function Home() {
         <div className="flex-1 bg-gradient-to-br from-[#0f0f0f] via-[#0a0a0a] to-[#0f0f0f] flex flex-col relative overflow-hidden">
           {chartData.length > 0 ? (
             <div className="w-full h-full flex flex-col p-3 animate-in fade-in duration-500 overflow-hidden">
-              <div className="mb-2 pb-2 border-b border-[#2a2a2a] flex-shrink-0">
+              <div className="mb-2 pb-2 border-b border-[#2a2a2a] flex-shrink-0 flex items-center justify-between">
                 <h2 className="text-white text-[18px] font-bold m-0 bg-gradient-to-r from-white to-[#b0b0b0] bg-clip-text text-transparent">
-                  定投成本 vs 价格趋势
+                  {chartView === 'cost' ? '定投成本 vs 价格趋势' : '年化收益率趋势'}
                 </h2>
+                <button
+                  onClick={() => setChartView(chartView === 'cost' ? 'return' : 'cost')}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#2a2a2a] hover:border-[#4a9eff] hover:text-[#4a9eff] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#4a9eff]/50"
+                  aria-label="切换视图"
+                >
+                  {chartView === 'cost' ? '📈 切换到年化收益率' : '💰 切换到成本收益'}
+                </button>
               </div>
-              <div className="flex-1 min-h-0 bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl p-4 border border-[#2a2a2a] shadow-2xl mb-2">
+              <div 
+                className="flex-1 min-h-0 bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl p-4 border border-[#2a2a2a] shadow-2xl mb-2"
+              >
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData} margin={{ top: 5, right: 25, left: 15, bottom: 50 }}>
+                  <LineChart 
+                    data={chartData} 
+                    margin={{ top: 5, right: 50, left: 50, bottom: 50 }}
+                  >
                     <CartesianGrid strokeDasharray="3 3" stroke="#333" opacity={0.3} />
                     <XAxis 
                       dataKey="date" 
@@ -530,13 +582,27 @@ export default function Home() {
                       tick={{ fill: '#999', fontSize: 12 }}
                       label={{ value: '时间', position: 'insideBottom', offset: -10, fill: '#999' }}
                     />
-                    <YAxis 
-                      label={{ value: '金额（元）', angle: -90, position: 'insideLeft', fill: '#999' }}
-                      stroke="#999"
-                      tick={{ fill: '#999', fontSize: 12 }}
-                      domain={stats?.yAxisDomain || ['auto', 'auto']}
-                      allowDataOverflow={false}
-                    />
+                    {chartView === 'cost' ? (
+                      <YAxis 
+                        yAxisId="left"
+                        label={{ value: '金额（元）', angle: -90, position: 'left', offset: 10, fill: '#999', style: { textAnchor: 'middle' } }}
+                        stroke="#999"
+                        tick={{ fill: '#999', fontSize: 12 }}
+                        domain={stats?.yAxisDomain || ['auto', 'auto']}
+                        allowDataOverflow={false}
+                      />
+                    ) : (
+                      <YAxis 
+                        yAxisId="right"
+                        orientation="right"
+                        label={{ value: '年化收益率（%）', angle: 90, position: 'right', offset: 10, fill: '#999', style: { textAnchor: 'middle' } }}
+                        stroke="#999"
+                        tick={{ fill: '#999', fontSize: 12 }}
+                        domain={stats?.yAxisRightDomain || ['auto', 'auto']}
+                        allowDataOverflow={false}
+                        tickFormatter={(value) => `${Number(value).toFixed(2)}%`}
+                      />
+                    )}
                     <Tooltip 
                       content={({ active, payload, label }) => {
                         if (!active || !payload || !payload.length) return null;
@@ -552,18 +618,9 @@ export default function Home() {
                           ? ((currentValue - totalInvestment) / totalInvestment) * 100 
                           : 0;
                         
-                        // 计算年化收益率
-                        const daysDiff = differenceInDays(currentDate, startDate);
-                        let annualizedReturnRate: number | null = null;
-                        if (daysDiff > 0 && totalInvestment > 0 && currentValue > 0) {
-                          const years = daysDiff / 365;
-                          if (years > 0) {
-                            const totalReturn = currentValue / totalInvestment;
-                            if (totalReturn > 0) {
-                              annualizedReturnRate = (Math.pow(totalReturn, 1 / years) - 1) * 100;
-                            }
-                          }
-                        }
+                        // 使用后端计算的年化收益率数据，确保一致性
+                        // 从数据中获取当前日期的年化收益率
+                        const currentAnnualizedRate = data.annualizedReturnRate || 0;
                         
                         return (
                           <div style={{
@@ -576,35 +633,40 @@ export default function Home() {
                             <div style={{ marginBottom: '8px', fontWeight: 'bold', fontSize: '14px', borderBottom: '1px solid #444', paddingBottom: '6px' }}>
                               日期: {label}
                             </div>
-                            {payload.map((entry: any, index: number) => (
-                              <div key={index} style={{ marginBottom: '4px', fontSize: '13px' }}>
-                                <span style={{ color: entry.color, marginRight: '8px' }}>●</span>
-                                <span style={{ color: '#e0e0e0' }}>{entry.name}: </span>
-                                <span style={{ color: '#fff', fontWeight: 'bold' }}>¥{entry.value.toFixed(2)}</span>
-                              </div>
-                            ))}
+                            {payload.map((entry: any, index: number) => {
+                              // 判断是收益率还是金额
+                              const isReturnRate = entry.dataKey === 'annualizedReturnRate';
+                              return (
+                                <div key={index} style={{ marginBottom: '4px', fontSize: '13px' }}>
+                                  <span style={{ color: entry.color, marginRight: '8px' }}>●</span>
+                                  <span style={{ color: '#e0e0e0' }}>{entry.name}: </span>
+                                  <span style={{ color: '#fff', fontWeight: 'bold' }}>
+                                    {isReturnRate 
+                                      ? `${entry.value >= 0 ? '+' : ''}${entry.value.toFixed(2)}%`
+                                      : `¥${Number(entry.value.toFixed(2)).toLocaleString('zh-CN')}`
+                                    }
+                                  </span>
+                                </div>
+                              );
+                            })}
                             <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px solid #444' }}>
                               <div style={{ marginBottom: '4px', fontSize: '13px' }}>
                                 <span style={{ color: '#888' }}>当前收益率: </span>
                                 <span style={{ 
-                                  color: currentReturnRate >= 0 ? '#52c41a' : '#ff4d4f',
+                                  color: currentReturnRate >= 0 ? '#ff4d4f' : '#52c41a',
                                   fontWeight: 'bold'
                                 }}>
                                   {currentReturnRate >= 0 ? '+' : ''}{currentReturnRate.toFixed(2)}%
                                 </span>
                               </div>
                               <div style={{ fontSize: '13px' }}>
-                                <span style={{ color: '#888' }}>年化收益率: </span>
-                                {annualizedReturnRate !== null ? (
-                                  <span style={{ 
-                                    color: annualizedReturnRate >= 0 ? '#52c41a' : '#ff4d4f',
-                                    fontWeight: 'bold'
-                                  }}>
-                                    {annualizedReturnRate >= 0 ? '+' : ''}{annualizedReturnRate.toFixed(2)}%
-                                  </span>
-                                ) : (
-                                  <span style={{ color: '#888' }}>--</span>
-                                )}
+                                <span style={{ color: '#888' }}>定投年化收益率: </span>
+                                <span style={{ 
+                                  color: currentAnnualizedRate >= 0 ? '#ff4d4f' : '#52c41a',
+                                  fontWeight: 'bold'
+                                }}>
+                                  {currentAnnualizedRate >= 0 ? '+' : ''}{currentAnnualizedRate.toFixed(2)}%
+                                </span>
                               </div>
                             </div>
                           </div>
@@ -616,26 +678,87 @@ export default function Home() {
                       iconType="line"
                       formatter={(value) => <span style={{ color: '#e0e0e0', fontSize: '14px' }}>{value}</span>}
                     />
-                    <Line 
-                      type="monotone" 
-                      dataKey="totalInvestment" 
-                      stroke="#00CED1" 
-                      name="累计投入金额"
-                      strokeWidth={3}
-                      dot={false}
-                      activeDot={{ r: 8, fill: '#00CED1' }}
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="currentValue" 
-                      stroke="#FFD700" 
-                      name="当前份额价值"
-                      strokeWidth={3}
-                      dot={false}
-                      activeDot={{ r: 8, fill: '#FFD700' }}
+                    {chartView === 'cost' ? (
+                      <>
+                        <Line 
+                          yAxisId="left"
+                          type="monotone" 
+                          dataKey="totalInvestment" 
+                          stroke="#00CED1" 
+                          name="累计投入金额"
+                          strokeWidth={3}
+                          dot={false}
+                          activeDot={{ r: 8, fill: '#00CED1' }}
+                        />
+                        <Line 
+                          yAxisId="left"
+                          type="monotone" 
+                          dataKey="currentValue" 
+                          stroke="#FFD700" 
+                          name="当前份额价值"
+                          strokeWidth={3}
+                          dot={false}
+                          activeDot={{ r: 8, fill: '#FFD700' }}
+                        />
+                      </>
+                    ) : (
+                      <>
+                        {/* 0% 参考线，帮助区分盈利/亏损 */}
+                        <ReferenceLine y={0} yAxisId="right" stroke="#888" strokeWidth={1} strokeDasharray="4 4" label={{ position: 'right', value: '0%', fill: '#888' }} />
+                        <Line 
+                          yAxisId="right"
+                          type="monotone" 
+                          dataKey="annualizedReturnRate" 
+                          stroke="#4ECDC4" 
+                          name="定投年化收益率"
+                          strokeWidth={3}
+                          dot={false}
+                          activeDot={{ r: 8, fill: "#4ECDC4" }}
+                        />
+                      </>
+                    )}
+                    <Brush
+                      dataKey="date"
+                      height={30}
+                      stroke="#4a9eff"
+                      fill="rgba(74, 158, 255, 0.1)"
+                      startIndex={brushStartIndex}
+                      endIndex={brushEndIndex > 0 ? brushEndIndex : (chartData.length > 0 ? chartData.length - 1 : 0)}
+                      onChange={(e) => {
+                        if (e && typeof e.startIndex === 'number' && typeof e.endIndex === 'number') {
+                          setBrushStartIndex(e.startIndex);
+                          setBrushEndIndex(e.endIndex);
+                        }
+                      }}
+                      tickFormatter={(value) => format(new Date(value), 'yyyy-MM-dd')}
+                      onClick={(e) => {
+                        // 阻止Brush的点击事件冒泡，避免触发视图切换
+                        e?.stopPropagation?.();
+                      }}
                     />
                   </LineChart>
                 </ResponsiveContainer>
+              </div>
+              {/* 缩放控制按钮 */}
+              <div className="flex items-center gap-2 mb-2 flex-shrink-0">
+                <button
+                  onClick={() => {
+                    setBrushStartIndex(0);
+                    setBrushEndIndex(chartData.length - 1);
+                  }}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#2a2a2a] hover:border-[#4a9eff] hover:text-[#4a9eff] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#4a9eff]/50"
+                  title="重置缩放"
+                >
+                  🔍 重置缩放
+                </button>
+                <div className="text-xs text-[#888] flex-1">
+                  {chartData.length > 0 && (
+                    <span>
+                      显示范围: {format(new Date(chartData[brushStartIndex]?.date || chartData[0]?.date), 'yyyy-MM-dd')} 
+                      ~ {format(new Date(chartData[brushEndIndex || chartData.length - 1]?.date || chartData[chartData.length - 1]?.date), 'yyyy-MM-dd')}
+                    </span>
+                  )}
+                </div>
               </div>
               
               {/* 定投记录表格 */}
@@ -675,13 +798,13 @@ export default function Home() {
                                 </span>
                               </td>
                               <td className="px-4 py-2 whitespace-nowrap text-xs text-[#e0e0e0]">
-                                {record.netValue.toFixed(4)}
+                                {record.netValue.toFixed(2)}
                               </td>
                               <td className="px-4 py-2 whitespace-nowrap text-xs text-[#e0e0e0]">
-                                {record.investmentAmount.toFixed(2)}
+                                {Number(record.investmentAmount.toFixed(2)).toLocaleString('zh-CN')}
                               </td>
                               <td className="px-4 py-2 whitespace-nowrap text-xs text-[#e0e0e0]">
-                                {record.shares.toFixed(2)}
+                                {Number(record.shares.toFixed(2))}
                               </td>
                             </tr>
                           );

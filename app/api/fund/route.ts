@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
+import { existsSync } from 'fs';
 
 const execAsync = promisify(exec);
 
@@ -19,9 +20,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // 使用绝对路径（Docker 容器中为 /app）
-    // 在 standalone 模式下，process.cwd() 可能不是 /app，所以使用环境变量或默认值
-    const appRoot = process.env.APP_ROOT || '/app';
+    // 确定应用根目录：优先使用环境变量，否则使用当前工作目录（本地开发）或 /app（Docker）
+    const appRoot = process.env.APP_ROOT || process.cwd();
     const scriptPath = path.join(appRoot, 'scripts', 'get_fund_data.py');
     
     // 验证基金代码格式（防止命令注入）
@@ -46,13 +46,44 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    // 使用 venv 环境中的 Python（优先使用环境变量）
-    const venvPython = process.env.VENV_PYTHON || path.join(appRoot, 'venv', 'bin', 'python');
+    // 确定 Python 可执行文件路径
+    // 优先使用环境变量，否则根据操作系统和 venv 位置自动检测
+    let venvPython = process.env.VENV_PYTHON;
+    
+    if (!venvPython) {
+      // 检测操作系统
+      const isWindows = process.platform === 'win32';
+      
+      if (isWindows) {
+        // Windows: venv/Scripts/python.exe
+        venvPython = path.join(appRoot, 'venv', 'Scripts', 'python.exe');
+      } else {
+        // Linux/Mac: 按优先级尝试不同的路径
+        const venvPython3Path = path.join(appRoot, 'venv', 'bin', 'python3');
+        const venvPythonPath = path.join(appRoot, 'venv', 'bin', 'python');
+        
+        // 优先使用 python3，如果不存在则使用 python
+        if (existsSync(venvPython3Path)) {
+          venvPython = venvPython3Path;
+        } else if (existsSync(venvPythonPath)) {
+          venvPython = venvPythonPath;
+        } else {
+          // 如果 venv 中的 Python 不存在，使用系统的 python3
+          venvPython = 'python3';
+        }
+      }
+    }
     
     // 构建命令参数（使用数组形式更安全）
     const args = [venvPython, scriptPath, fundCode];
     if (startDate) args.push(startDate);
     if (endDate) args.push(endDate);
+    
+    // 构建 PATH 环境变量（添加 venv 的 bin/Scripts 目录）
+    const isWindows = process.platform === 'win32';
+    const venvBinPath = isWindows 
+      ? path.join(appRoot, 'venv', 'Scripts')
+      : path.join(appRoot, 'venv', 'bin');
     
     // 执行 Python 脚本
     const { stdout, stderr } = await execAsync(args.join(' '), {
@@ -60,7 +91,7 @@ export async function GET(request: NextRequest) {
       timeout: 30000, // 30秒超时
       env: { 
         ...process.env, 
-        PATH: `${path.join(appRoot, 'venv', 'bin')}:${process.env.PATH}` 
+        PATH: `${venvBinPath}${isWindows ? ';' : ':'}${process.env.PATH}` 
       }
     });
     
@@ -86,11 +117,29 @@ export async function GET(request: NextRequest) {
     console.error('获取基金数据失败:', error);
     
     // 如果 Python 脚本执行失败，返回友好的错误信息
-    if (error.message && error.message.includes('python3')) {
+    const errorMessage = error.message || error.toString();
+    
+    if (errorMessage.includes('not found') || errorMessage.includes('ENOENT')) {
+      const appRoot = process.env.APP_ROOT || process.cwd();
+      const isWindows = process.platform === 'win32';
+      const venvPath = isWindows 
+        ? path.join(appRoot, 'venv', 'Scripts', 'python.exe')
+        : path.join(appRoot, 'venv', 'bin', 'python3');
+      
+      return NextResponse.json(
+        { 
+          error: '无法找到 Python 可执行文件。请确保：\n1. 已创建 Python 虚拟环境（python3 -m venv venv）\n2. 已安装依赖（venv/bin/pip install -r requirements.txt）\n3. Python 路径正确',
+          details: `尝试的路径: ${venvPath}\n错误: ${errorMessage}`
+        },
+        { status: 500 }
+      );
+    }
+    
+    if (errorMessage.includes('python') || errorMessage.includes('Python')) {
       return NextResponse.json(
         { 
           error: '无法执行 Python 脚本。请确保已安装 Python 3 和 akshare 库（pip install akshare）',
-          details: error.message
+          details: errorMessage
         },
         { status: 500 }
       );
@@ -98,7 +147,7 @@ export async function GET(request: NextRequest) {
     
     return NextResponse.json(
       { 
-        error: error.message || '获取基金数据失败，请检查基金代码是否正确',
+        error: errorMessage || '获取基金数据失败，请检查基金代码是否正确',
         details: error.toString()
       },
       { status: 500 }

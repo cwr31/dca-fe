@@ -26,6 +26,9 @@ function calculateDCA(params: BacktestParams) {
     totalShares: number;
     averageCost: number;
     currentValue: number;  // 当前市值（份额 × 单位净值）
+    annualizedReturnRate?: number; // 从开始到该天的年化收益率
+    averageAnnualizedReturnRate?: number; // 从开始到该天的平均年化收益率
+    averageAnnualizedReturnRateForInterval?: number; // 区间内定投平均年化收益率（水平直线）
   }> = [];
 
   let totalInvestment = 0;
@@ -45,8 +48,14 @@ function calculateDCA(params: BacktestParams) {
     new Date(a.date).getTime() - new Date(b.date).getTime()
   );
 
+  // 获取基金数据的实际开始日期（第一条数据的日期）
+  const actualStartDate = new Date(sortedData[0].date);
   const start = new Date(startDate);
   const end = new Date(endDate);
+  
+  // 使用实际开始日期和用户传入的开始日期中较晚的一个作为计算年化收益率的开始时间
+  const effectiveStartDate = actualStartDate > start ? actualStartDate : start;
+  const startTime = effectiveStartDate.getTime();
 
   // 判断是否需要定投的辅助函数
   const shouldInvest = (currentDate: Date, lastDate: Date | null): boolean => {
@@ -151,6 +160,19 @@ function calculateDCA(params: BacktestParams) {
     // 计算当前市值 - 使用单位净值（当前份额价值 = 份额 × 单位净值）
     const currentValue = totalShares * dataPoint.netValue;
 
+    // 计算年化收益率（从开始日期到当前日期）
+    let annualizedReturnRate: number | null = null;
+    if (totalInvestment > 0) {
+      const currentTime = currentDate.getTime();
+      const daysDiff = (currentTime - startTime) / (24 * 60 * 60 * 1000);
+      if (daysDiff > 0) {
+        // 计算当前收益率
+        const currentReturnRate = ((currentValue - totalInvestment) / totalInvestment) * 100;
+        // 年化收益率 = 当前收益率 × (365 / 投资天数)
+        annualizedReturnRate = Number((currentReturnRate * (365 / daysDiff)).toFixed(2));
+      }
+    }
+
     results.push({
       date: dataPoint.date,
       price: dataPoint.netValue, // 单位净值，用于显示
@@ -159,6 +181,7 @@ function calculateDCA(params: BacktestParams) {
       totalShares,
       averageCost: averageCost || dataPoint.netValue, // 如果没有投资，使用单位净值
       currentValue, // 当前市值
+      annualizedReturnRate: annualizedReturnRate ?? undefined,
     });
   }
 
@@ -218,6 +241,8 @@ export async function POST(request: NextRequest) {
     // 定投收益率 = (期末总资产 - 投入总本金) / 投入总本金 × 100%
     const profit = finalTotalAssets - totalPrincipal;
     const profitRate = totalPrincipal > 0 ? (profit / totalPrincipal) * 100 : 0;
+
+    // 移除不需要的平均年化收益率计算，前端直接使用annualizedReturnRate字段
 
     return NextResponse.json({
       success: true,
