@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Brush, ReferenceLine } from 'recharts';
 import { format, subYears } from 'date-fns';
 
@@ -69,6 +69,36 @@ export default function Home() {
   const [chartView, setChartView] = useState<'cost' | 'return'>('cost'); // 图表视图：cost=成本收益视图, return=年化收益率视图
   const [brushStartIndex, setBrushStartIndex] = useState<number>(0);
   const [brushEndIndex, setBrushEndIndex] = useState<number>(0);
+  const [isMobile, setIsMobile] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false); // 移动端侧边栏开关
+
+  // 检测移动端（使用防抖优化性能）
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+      // 在桌面端默认打开侧边栏，移动端默认关闭
+      if (window.innerWidth >= 768) {
+        setSidebarOpen(true);
+      } else {
+        setSidebarOpen(false);
+      }
+    };
+    
+    checkMobile();
+    
+    // 防抖处理 resize 事件
+    let timeoutId: NodeJS.Timeout;
+    const handleResize = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(checkMobile, 150);
+    };
+    
+    window.addEventListener('resize', handleResize, { passive: true });
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      clearTimeout(timeoutId);
+    };
+  }, []);
 
   // 设置结束日期默认为今天
   useEffect(() => {
@@ -228,7 +258,7 @@ export default function Home() {
       ];
       
       // 计算收益率Y轴范围（右侧Y轴）
-      let yAxisRightDomain = ['auto', 'auto'];
+      let yAxisRightDomain: [string | number, string | number] = ['auto', 'auto'];
       if (allReturnRates.length > 0) {
         const minRate = Math.min(...allReturnRates);
         const maxRate = Math.max(...allReturnRates);
@@ -254,12 +284,136 @@ export default function Home() {
     }
   };
 
+  // 根据可见数据范围计算y轴域
+  const visibleYAxisDomain = useMemo(() => {
+    if (!chartData || chartData.length === 0) {
+      return {
+        left: stats?.yAxisDomain || ['auto', 'auto'],
+        right: stats?.yAxisRightDomain || ['auto', 'auto']
+      };
+    }
+
+    // 获取可见数据范围，确保索引在有效范围内
+    const startIdx = Math.max(0, Math.min(brushStartIndex, chartData.length - 1));
+    // brushEndIndex 为 0 可能表示未初始化，使用最后一个索引；否则使用 brushEndIndex
+    const endIdx = brushEndIndex > 0 && brushEndIndex < chartData.length
+      ? Math.max(brushEndIndex, startIdx) // 确保 endIdx >= startIdx
+      : chartData.length - 1;
+    const visibleData = chartData.slice(startIdx, endIdx + 1);
+
+    if (visibleData.length === 0) {
+      return {
+        left: stats?.yAxisDomain || ['auto', 'auto'],
+        right: stats?.yAxisRightDomain || ['auto', 'auto']
+      };
+    }
+
+    // 计算成本收益视图的y轴域（左侧y轴）
+    const costValues = visibleData.flatMap(item => [
+      item.totalInvestment,
+      item.currentValue
+    ]).filter((v): v is number => v !== null && v !== undefined && !isNaN(v) && isFinite(v));
+
+    let leftDomain = stats?.yAxisDomain || ['auto', 'auto'];
+    if (costValues.length > 0) {
+      const minValue = Math.min(...costValues);
+      const maxValue = Math.max(...costValues);
+      const range = maxValue - minValue;
+      // 如果所有值相同，使用值的10%作为padding，或者至少使用1
+      const padding = range > 0 ? Math.max(range * 0.1, maxValue * 0.05) : Math.max(maxValue * 0.1, 1);
+      // 如果最小值较大（相对于范围），允许从更小的值开始；否则至少从0开始
+      const yAxisMin = minValue > range * 0.3 ? minValue - padding : Math.max(0, minValue - padding);
+      leftDomain = [
+        yAxisMin,
+        maxValue + padding
+      ];
+    }
+
+    // 计算年化收益率视图的y轴域（右侧y轴）
+    const returnRates = visibleData
+      .map(item => item.annualizedReturnRate)
+      .filter((v): v is number => v !== null && v !== undefined && !isNaN(v) && isFinite(v));
+
+    let rightDomain = stats?.yAxisRightDomain || ['auto', 'auto'];
+    if (returnRates.length > 0) {
+      const minRate = Math.min(...returnRates);
+      const maxRate = Math.max(...returnRates);
+      const rateRange = maxRate - minRate;
+      // 如果所有值相同，使用值的10%作为padding，或者至少使用5%
+      const ratePadding = rateRange > 0 
+        ? Math.max(rateRange * 0.1, Math.abs(maxRate) * 0.05) 
+        : Math.max(Math.abs(maxRate) * 0.1, 5);
+      rightDomain = [
+        minRate - ratePadding,
+        maxRate + ratePadding
+      ];
+    }
+
+    return {
+      left: leftDomain,
+      right: rightDomain
+    };
+  }, [chartData, brushStartIndex, brushEndIndex, stats?.yAxisDomain, stats?.yAxisRightDomain]);
+
   return (
     <div className="w-full h-screen overflow-hidden bg-gradient-to-br from-[#0a0a0a] via-[#0f0f0f] to-[#0a0a0a]">
-      <div className="flex h-screen w-full">
+      <div className="flex h-screen w-full relative">
+        {/* 移动端菜单按钮 */}
+        {isMobile && (
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="fixed top-4 left-4 z-50 p-3 bg-[#252525] border border-[#3a3a3a] rounded-lg text-white hover:bg-[#2a2a2a] active:bg-[#1a1a1a] active:scale-95 transition-all duration-200 shadow-lg touch-manipulation"
+            aria-label="切换菜单"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+        )}
+
+        {/* 移动端遮罩层 */}
+        {isMobile && sidebarOpen && (
+          <div
+            className="fixed inset-0 bg-black/60 z-40 md:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
         {/* 左侧参数设置面板 */}
-        <div className="w-[340px] min-w-[340px] bg-gradient-to-b from-[#1a1a1a] to-[#151515] border-r border-[#2a2a2a] flex flex-col overflow-y-auto overflow-x-hidden custom-scrollbar shadow-2xl">
-          <div className="px-5 py-4 flex-1 space-y-4">
+        <div
+          className={`
+            ${isMobile ? 'fixed' : 'relative'} 
+            ${isMobile ? (sidebarOpen ? 'translate-x-0' : '-translate-x-full') : ''}
+            ${isMobile ? 'z-50' : ''}
+            w-full md:w-[340px] md:min-w-[340px]
+            h-full
+            bg-gradient-to-b from-[#1a1a1a] to-[#151515] 
+            border-r border-[#2a2a2a] 
+            flex flex-col 
+            overflow-y-auto overflow-x-hidden 
+            custom-scrollbar 
+            shadow-2xl
+            transition-transform duration-300 ease-in-out
+            ${isMobile ? 'max-w-[85vw] sm:max-w-[340px]' : ''}
+          `}
+        >
+          <div className="px-4 sm:px-5 py-4 flex-1 space-y-4">
+            {/* 移动端关闭按钮 */}
+            {isMobile && (
+              <div className="flex items-center justify-between mb-4 pb-4 border-b border-[#2a2a2a]">
+                <h2 className="text-white text-lg font-bold">参数设置</h2>
+                <button
+                  onClick={() => setSidebarOpen(false)}
+                  className="p-2 text-[#b0b0b0] hover:text-white hover:bg-[#2a2a2a] rounded-lg transition-all duration-200"
+                  aria-label="关闭菜单"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            )}
+
             <div className="group">
               <label htmlFor="fundCode" className="block mb-2 text-[#b0b0b0] font-medium text-sm flex items-center gap-2">
                 <span className="text-[#4a9eff]">📊</span>
@@ -271,9 +425,10 @@ export default function Home() {
                 value={fundCode}
                 onChange={(e) => setFundCode(e.target.value)}
                 placeholder="例如：000001"
-                className="w-full px-4 py-2.5 border border-[#3a3a3a] rounded-lg text-sm transition-all duration-200 bg-[#252525] text-[#e0e0e0] placeholder:text-[#666] focus:outline-none focus:border-[#4a9eff] focus:bg-[#2a2a2a] focus:shadow-[0_0_0_3px_rgba(74,158,255,0.1)] hover:border-[#4a4a4a]"
+                className="w-full px-4 py-3 md:py-2.5 border border-[#3a3a3a] rounded-lg text-base md:text-sm transition-all duration-200 bg-[#252525] text-[#e0e0e0] placeholder:text-[#666] focus:outline-none focus:border-[#4a9eff] focus:bg-[#2a2a2a] focus:shadow-[0_0_0_3px_rgba(74,158,255,0.1)] hover:border-[#4a4a4a] touch-manipulation"
                 tabIndex={0}
                 aria-label="基金代码输入框"
+                inputMode="numeric"
               />
             </div>
 
@@ -289,9 +444,10 @@ export default function Home() {
                 onChange={(e) => setInvestmentAmount(e.target.value)}
                 min="1"
                 step="0.01"
-                className="w-full px-4 py-2.5 border border-[#3a3a3a] rounded-lg text-sm transition-all duration-200 bg-[#252525] text-[#e0e0e0] placeholder:text-[#666] focus:outline-none focus:border-[#4a9eff] focus:bg-[#2a2a2a] focus:shadow-[0_0_0_3px_rgba(74,158,255,0.1)] hover:border-[#4a4a4a]"
+                className="w-full px-4 py-3 md:py-2.5 border border-[#3a3a3a] rounded-lg text-base md:text-sm transition-all duration-200 bg-[#252525] text-[#e0e0e0] placeholder:text-[#666] focus:outline-none focus:border-[#4a9eff] focus:bg-[#2a2a2a] focus:shadow-[0_0_0_3px_rgba(74,158,255,0.1)] hover:border-[#4a4a4a] touch-manipulation"
                 tabIndex={0}
                 aria-label="每次投资金额输入框"
+                inputMode="decimal"
               />
             </div>
 
@@ -304,7 +460,7 @@ export default function Home() {
                 id="frequency"
                 value={frequency}
                 onChange={(e) => setFrequency(e.target.value as 'daily' | 'weekly' | 'monthly')}
-                className="w-full px-4 py-2.5 border border-[#3a3a3a] rounded-lg text-sm transition-all duration-200 bg-[#252525] text-[#e0e0e0] focus:outline-none focus:border-[#4a9eff] focus:bg-[#2a2a2a] focus:shadow-[0_0_0_3px_rgba(74,158,255,0.1)] hover:border-[#4a4a4a] cursor-pointer"
+                className="w-full px-4 py-3 md:py-2.5 border border-[#3a3a3a] rounded-lg text-base md:text-sm transition-all duration-200 bg-[#252525] text-[#e0e0e0] focus:outline-none focus:border-[#4a9eff] focus:bg-[#2a2a2a] focus:shadow-[0_0_0_3px_rgba(74,158,255,0.1)] hover:border-[#4a4a4a] cursor-pointer touch-manipulation"
                 tabIndex={0}
                 aria-label="定投频率选择"
               >
@@ -324,7 +480,7 @@ export default function Home() {
                   id="weeklyDayOfWeek"
                   value={weeklyDayOfWeek}
                   onChange={(e) => setWeeklyDayOfWeek(parseInt(e.target.value))}
-                  className="w-full px-4 py-2.5 border border-[#3a3a3a] rounded-lg text-sm transition-all duration-200 bg-[#252525] text-[#e0e0e0] focus:outline-none focus:border-[#4a9eff] focus:bg-[#2a2a2a] focus:shadow-[0_0_0_3px_rgba(74,158,255,0.1)] hover:border-[#4a4a4a] cursor-pointer"
+                  className="w-full px-4 py-3 md:py-2.5 border border-[#3a3a3a] rounded-lg text-base md:text-sm transition-all duration-200 bg-[#252525] text-[#e0e0e0] focus:outline-none focus:border-[#4a9eff] focus:bg-[#2a2a2a] focus:shadow-[0_0_0_3px_rgba(74,158,255,0.1)] hover:border-[#4a4a4a] cursor-pointer touch-manipulation"
                   tabIndex={0}
                   aria-label="每周定投日期选择"
                 >
@@ -355,7 +511,7 @@ export default function Home() {
                       handleQuickDateSelect(1);
                     }
                   }}
-                  className="w-full px-3 py-2 text-xs font-medium rounded-lg bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#2a2a2a] hover:border-[#4a9eff] hover:text-[#4a9eff] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#4a9eff]/50"
+                  className="w-full px-3 py-2.5 md:py-2 text-sm md:text-xs font-medium rounded-lg bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#2a2a2a] hover:border-[#4a9eff] hover:text-[#4a9eff] active:bg-[#2a2a2a] active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#4a9eff]/50 touch-manipulation"
                   tabIndex={0}
                   aria-label="选择近一年"
                 >
@@ -370,7 +526,7 @@ export default function Home() {
                       handleQuickDateSelect(3);
                     }
                   }}
-                  className="w-full px-3 py-2 text-xs font-medium rounded-lg bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#2a2a2a] hover:border-[#4a9eff] hover:text-[#4a9eff] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#4a9eff]/50"
+                  className="w-full px-3 py-2.5 md:py-2 text-sm md:text-xs font-medium rounded-lg bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#2a2a2a] hover:border-[#4a9eff] hover:text-[#4a9eff] active:bg-[#2a2a2a] active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#4a9eff]/50 touch-manipulation"
                   tabIndex={0}
                   aria-label="选择近3年"
                 >
@@ -385,7 +541,7 @@ export default function Home() {
                       handleQuickDateSelect(5);
                     }
                   }}
-                  className="w-full px-3 py-2 text-xs font-medium rounded-lg bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#2a2a2a] hover:border-[#4a9eff] hover:text-[#4a9eff] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#4a9eff]/50"
+                  className="w-full px-3 py-2.5 md:py-2 text-sm md:text-xs font-medium rounded-lg bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#2a2a2a] hover:border-[#4a9eff] hover:text-[#4a9eff] active:bg-[#2a2a2a] active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#4a9eff]/50 touch-manipulation"
                   tabIndex={0}
                   aria-label="选择近5年"
                 >
@@ -400,7 +556,7 @@ export default function Home() {
                       handleQuickDateSelect(10);
                     }
                   }}
-                  className="w-full px-3 py-2 text-xs font-medium rounded-lg bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#2a2a2a] hover:border-[#4a9eff] hover:text-[#4a9eff] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#4a9eff]/50"
+                  className="w-full px-3 py-2.5 md:py-2 text-sm md:text-xs font-medium rounded-lg bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#2a2a2a] hover:border-[#4a9eff] hover:text-[#4a9eff] active:bg-[#2a2a2a] active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#4a9eff]/50 touch-manipulation"
                   tabIndex={0}
                   aria-label="选择近10年"
                 >
@@ -413,10 +569,11 @@ export default function Home() {
                 value={startDateInput}
                 onChange={(e) => setStartDateInput(e.target.value)}
                 placeholder="例如：20200101 或 2020-01-01"
-                className="w-full px-4 py-2.5 border border-[#3a3a3a] rounded-lg text-sm transition-all duration-200 bg-[#252525] text-[#e0e0e0] placeholder:text-[#666] focus:outline-none focus:border-[#4a9eff] focus:bg-[#2a2a2a] focus:shadow-[0_0_0_3px_rgba(74,158,255,0.1)] hover:border-[#4a4a4a]"
+                className="w-full px-4 py-3 md:py-2.5 border border-[#3a3a3a] rounded-lg text-base md:text-sm transition-all duration-200 bg-[#252525] text-[#e0e0e0] placeholder:text-[#666] focus:outline-none focus:border-[#4a9eff] focus:bg-[#2a2a2a] focus:shadow-[0_0_0_3px_rgba(74,158,255,0.1)] hover:border-[#4a4a4a] touch-manipulation"
                 tabIndex={0}
                 aria-label="开始日期输入框"
                 required
+                inputMode="numeric"
               />
             </div>
 
@@ -431,22 +588,32 @@ export default function Home() {
                 value={endDateInput}
                 onChange={(e) => setEndDateInput(e.target.value)}
                 placeholder="例如：20241231 或 2024-12-31"
-                className="w-full px-4 py-2.5 border border-[#3a3a3a] rounded-lg text-sm transition-all duration-200 bg-[#252525] text-[#e0e0e0] placeholder:text-[#666] focus:outline-none focus:border-[#4a9eff] focus:bg-[#2a2a2a] focus:shadow-[0_0_0_3px_rgba(74,158,255,0.1)] hover:border-[#4a4a4a]"
+                className="w-full px-4 py-3 md:py-2.5 border border-[#3a3a3a] rounded-lg text-base md:text-sm transition-all duration-200 bg-[#252525] text-[#e0e0e0] placeholder:text-[#666] focus:outline-none focus:border-[#4a9eff] focus:bg-[#2a2a2a] focus:shadow-[0_0_0_3px_rgba(74,158,255,0.1)] hover:border-[#4a4a4a] touch-manipulation"
                 tabIndex={0}
                 aria-label="结束日期输入框"
+                inputMode="numeric"
               />
             </div>
 
             <button
-              onClick={handleBacktest}
-              onKeyDown={(e) => {
+              onClick={async () => {
+                await handleBacktest();
+                // 移动端提交后自动关闭侧边栏
+                if (isMobile) {
+                  setTimeout(() => setSidebarOpen(false), 300);
+                }
+              }}
+              onKeyDown={async (e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
-                  handleBacktest();
+                  await handleBacktest();
+                  if (isMobile) {
+                    setTimeout(() => setSidebarOpen(false), 300);
+                  }
                 }
               }}
               disabled={loading}
-              className="w-full bg-gradient-to-r from-[#4a9eff] via-[#3a8eef] to-[#0066cc] text-white px-6 py-3 rounded-lg text-[15px] font-semibold cursor-pointer transition-all duration-200 mt-2 hover:translate-y-[-2px] hover:shadow-[0_8px_20px_rgba(74,158,255,0.4)] hover:from-[#5aaeff] hover:to-[#0076dc] active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:hover:shadow-none relative overflow-hidden group"
+              className="w-full bg-gradient-to-r from-[#4a9eff] via-[#3a8eef] to-[#0066cc] text-white px-6 py-4 md:py-3 rounded-lg text-base md:text-[15px] font-semibold cursor-pointer transition-all duration-200 mt-2 hover:translate-y-[-2px] hover:shadow-[0_8px_20px_rgba(74,158,255,0.4)] hover:from-[#5aaeff] hover:to-[#0076dc] active:translate-y-0 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:hover:shadow-none relative overflow-hidden group touch-manipulation"
               tabIndex={0}
               aria-label="开始回测按钮"
             >
@@ -479,65 +646,65 @@ export default function Home() {
                   <div className="w-1 h-5 bg-gradient-to-b from-[#4a9eff] to-[#0066cc] rounded-full"></div>
                   <h3 className="text-white text-base font-bold">回测统计</h3>
                 </div>
-                <div className="grid grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-2 gap-2 md:gap-2.5">
                   <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] px-3 py-3 rounded-xl border border-[#2a2a2a] text-left hover:border-[#3a3a3a] transition-all duration-200 hover:shadow-lg hover:shadow-[#4a9eff]/5 group">
                     <div className="flex items-center justify-between mb-2">
                       <div className="text-[#888] text-xs font-medium uppercase tracking-wide">定投总期数</div>
-                      <span className="text-[#4a9eff] opacity-0 group-hover:opacity-100 transition-opacity">📊</span>
+                      <span className="text-[#4a9eff] opacity-0 group-hover:opacity-100 transition-opacity hidden md:inline">📊</span>
                     </div>
-                    <div className="text-white text-xl font-bold">{investmentRecords.length}期</div>
+                    <div className="text-white text-lg md:text-xl font-bold">{investmentRecords.length}期</div>
                   </div>
                   <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] px-3 py-3 rounded-xl border border-[#2a2a2a] text-left hover:border-[#3a3a3a] transition-all duration-200 hover:shadow-lg hover:shadow-[#4a9eff]/5 group">
                     <div className="flex items-center justify-between mb-2">
                       <div className="text-[#888] text-xs font-medium uppercase tracking-wide">投入总本金（元）</div>
-                      <span className="text-[#4a9eff] opacity-0 group-hover:opacity-100 transition-opacity">💵</span>
+                      <span className="text-[#4a9eff] opacity-0 group-hover:opacity-100 transition-opacity hidden md:inline">💵</span>
                     </div>
-                    <div className="text-white text-xl font-bold">¥{Number(stats.totalInvestment.toFixed(2)).toLocaleString('zh-CN')}</div>
+                    <div className="text-white text-lg md:text-xl font-bold">¥{Number(stats.totalInvestment.toFixed(2)).toLocaleString('zh-CN')}</div>
                   </div>
                   <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] px-3 py-3 rounded-xl border border-[#2a2a2a] text-left hover:border-[#3a3a3a] transition-all duration-200 hover:shadow-lg hover:shadow-[#4a9eff]/5 group">
                     <div className="flex items-center justify-between mb-2">
                       <div className="text-[#888] text-xs font-medium uppercase tracking-wide">期末总资产（元）</div>
-                      <span className="text-[#4a9eff] opacity-0 group-hover:opacity-100 transition-opacity">💰</span>
+                      <span className="text-[#4a9eff] opacity-0 group-hover:opacity-100 transition-opacity hidden md:inline">💰</span>
                     </div>
-                    <div className="text-white text-xl font-bold">¥{Number(stats.currentValue.toFixed(2)).toLocaleString('zh-CN')}</div>
+                    <div className="text-white text-lg md:text-xl font-bold">¥{Number(stats.currentValue.toFixed(2)).toLocaleString('zh-CN')}</div>
                   </div>
                   <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] px-3 py-3 rounded-xl border border-[#2a2a2a] text-left hover:border-[#3a3a3a] transition-all duration-200 hover:shadow-lg hover:shadow-[#4a9eff]/5 group">
                     <div className="flex items-center justify-between mb-2">
                       <div className="text-[#888] text-xs font-medium uppercase tracking-wide">定投收益率</div>
-                      <span className={`opacity-0 group-hover:opacity-100 transition-opacity ${stats.profitRate >= 0 ? 'text-[#ff4d4f]' : 'text-[#52c41a]'}`}>
+                      <span className={`opacity-0 group-hover:opacity-100 transition-opacity hidden md:inline ${stats.profitRate >= 0 ? 'text-[#ff4d4f]' : 'text-[#52c41a]'}`}>
                         {stats.profitRate >= 0 ? '📈' : '📉'}
                       </span>
                     </div>
-                    <div className={`text-xl font-bold ${stats.profitRate >= 0 ? 'text-[#ff4d4f]' : 'text-[#52c41a]'}`}>
+                    <div className={`text-lg md:text-xl font-bold ${stats.profitRate >= 0 ? 'text-[#ff4d4f]' : 'text-[#52c41a]'}`}>
                       {stats.profitRate >= 0 ? '+' : ''}{stats.profitRate.toFixed(2)}%
                     </div>
                   </div>
                   <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] px-3 py-3 rounded-xl border border-[#2a2a2a] text-left hover:border-[#3a3a3a] transition-all duration-200 hover:shadow-lg hover:shadow-[#4a9eff]/5 group">
                     <div className="flex items-center justify-between mb-2">
                       <div className="text-[#888] text-xs font-medium uppercase tracking-wide">当前份额</div>
-                      <span className="text-[#4a9eff] opacity-0 group-hover:opacity-100 transition-opacity">📊</span>
+                      <span className="text-[#4a9eff] opacity-0 group-hover:opacity-100 transition-opacity hidden md:inline">📊</span>
                     </div>
-                    <div className="text-white text-xl font-bold">{Number(stats.totalShares.toFixed(2))}</div>
+                    <div className="text-white text-lg md:text-xl font-bold">{Number(stats.totalShares.toFixed(2))}</div>
                   </div>
                   <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] px-3 py-3 rounded-xl border border-[#2a2a2a] text-left hover:border-[#3a3a3a] transition-all duration-200 hover:shadow-lg hover:shadow-[#4a9eff]/5 group">
                     <div className="flex items-center justify-between mb-2">
                       <div className="text-[#888] text-xs font-medium uppercase tracking-wide">一次性投入收益率</div>
-                      <span className={`opacity-0 group-hover:opacity-100 transition-opacity ${stats.priceChangePercent >= 0 ? 'text-[#ff4d4f]' : 'text-[#52c41a]'}`}>
+                      <span className={`opacity-0 group-hover:opacity-100 transition-opacity hidden md:inline ${stats.priceChangePercent >= 0 ? 'text-[#ff4d4f]' : 'text-[#52c41a]'}`}>
                         {stats.priceChangePercent >= 0 ? '📈' : '📉'}
                       </span>
                     </div>
-                    <div className={`text-xl font-bold ${stats.priceChangePercent >= 0 ? 'text-[#ff4d4f]' : 'text-[#52c41a]'}`}>
+                    <div className={`text-lg md:text-xl font-bold ${stats.priceChangePercent >= 0 ? 'text-[#ff4d4f]' : 'text-[#52c41a]'}`}>
                       {stats.priceChangePercent >= 0 ? '+' : ''}{stats.priceChangePercent?.toFixed(2) || '0.00'}%
                     </div>
                   </div>
                   <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] px-3 py-3 rounded-xl border border-[#2a2a2a] text-left hover:border-[#3a3a3a] transition-all duration-200 hover:shadow-lg hover:shadow-[#4a9eff]/5 group">
                     <div className="flex items-center justify-between mb-2">
                       <div className="text-[#888] text-xs font-medium uppercase tracking-wide">盈亏金额</div>
-                      <span className={`opacity-0 group-hover:opacity-100 transition-opacity ${stats.profit >= 0 ? 'text-[#ff4d4f]' : 'text-[#52c41a]'}`}>
+                      <span className={`opacity-0 group-hover:opacity-100 transition-opacity hidden md:inline ${stats.profit >= 0 ? 'text-[#ff4d4f]' : 'text-[#52c41a]'}`}>
                         {stats.profit >= 0 ? '📈' : '📉'}
                       </span>
                     </div>
-                    <div className={`text-xl font-bold ${stats.profit >= 0 ? 'text-[#ff4d4f]' : 'text-[#52c41a]'}`}>
+                    <div className={`text-lg md:text-xl font-bold ${stats.profit >= 0 ? 'text-[#ff4d4f]' : 'text-[#52c41a]'}`}>
                       {stats.profit >= 0 ? '+' : ''}¥{Number(stats.profit.toFixed(2)).toLocaleString('zh-CN')}
                     </div>
                   </div>
@@ -550,57 +717,59 @@ export default function Home() {
         {/* 右侧图表展示区域 */}
         <div className="flex-1 bg-gradient-to-br from-[#0f0f0f] via-[#0a0a0a] to-[#0f0f0f] flex flex-col relative overflow-hidden">
           {chartData.length > 0 ? (
-            <div className="w-full h-full flex flex-col p-3 animate-in fade-in duration-500 overflow-hidden">
-              <div className="mb-2 pb-2 border-b border-[#2a2a2a] flex-shrink-0 flex items-center justify-between">
-                <h2 className="text-white text-[18px] font-bold m-0 bg-gradient-to-r from-white to-[#b0b0b0] bg-clip-text text-transparent">
+            <div className="w-full h-full flex flex-col p-2 md:p-3 animate-in fade-in duration-500 overflow-hidden">
+              <div className="mb-2 pb-2 border-b border-[#2a2a2a] flex-shrink-0 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                <h2 className="text-white text-base md:text-[18px] font-bold m-0 bg-gradient-to-r from-white to-[#b0b0b0] bg-clip-text text-transparent">
                   {chartView === 'cost' ? '定投成本 vs 价格趋势' : '年化收益率趋势'}
                 </h2>
                 <button
                   onClick={() => setChartView(chartView === 'cost' ? 'return' : 'cost')}
-                  className="px-3 py-1.5 text-xs font-medium rounded-lg bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#2a2a2a] hover:border-[#4a9eff] hover:text-[#4a9eff] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#4a9eff]/50"
+                  className="px-3 py-2 md:py-1.5 text-xs font-medium rounded-lg bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#2a2a2a] hover:border-[#4a9eff] hover:text-[#4a9eff] active:scale-95 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#4a9eff]/50 touch-manipulation w-full sm:w-auto"
                   aria-label="切换视图"
                 >
                   {chartView === 'cost' ? '📈 切换到年化收益率' : '💰 切换到成本收益'}
                 </button>
               </div>
               <div 
-                className="flex-1 min-h-0 bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl p-4 border border-[#2a2a2a] shadow-2xl mb-2"
+                className="flex-1 min-h-0 bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl p-2 md:p-4 border border-[#2a2a2a] shadow-2xl mb-2"
               >
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart 
                     data={chartData} 
-                    margin={{ top: 5, right: 50, left: 50, bottom: 50 }}
+                    margin={{ top: 5, right: isMobile ? 20 : 50, left: isMobile ? 20 : 50, bottom: isMobile ? 60 : 50 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke="#333" opacity={0.3} />
                     <XAxis 
                       dataKey="date" 
-                      angle={-45}
+                      angle={isMobile ? -60 : -45}
                       textAnchor="end"
-                      height={80}
+                      height={isMobile ? 100 : 80}
                       interval="preserveStartEnd"
                       stroke="#999"
-                      tick={{ fill: '#999', fontSize: 12 }}
-                      label={{ value: '时间', position: 'insideBottom', offset: -10, fill: '#999' }}
+                      tick={{ fill: '#999', fontSize: isMobile ? 10 : 12 }}
+                      label={{ value: '时间', position: 'insideBottom', offset: isMobile ? -5 : -10, fill: '#999', style: { fontSize: isMobile ? 11 : 12 } }}
                     />
                     {chartView === 'cost' ? (
                       <YAxis 
                         yAxisId="left"
-                        label={{ value: '金额（元）', angle: -90, position: 'left', offset: 10, fill: '#999', style: { textAnchor: 'middle' } }}
+                        label={{ value: '金额（元）', angle: -90, position: 'left', offset: isMobile ? 5 : 10, fill: '#999', style: { textAnchor: 'middle', fontSize: isMobile ? 11 : 12 } }}
                         stroke="#999"
-                        tick={{ fill: '#999', fontSize: 12 }}
-                        domain={stats?.yAxisDomain || ['auto', 'auto']}
+                        tick={{ fill: '#999', fontSize: isMobile ? 10 : 12 }}
+                        domain={visibleYAxisDomain.left}
                         allowDataOverflow={false}
+                        width={isMobile ? 40 : 60}
                       />
                     ) : (
                       <YAxis 
                         yAxisId="right"
                         orientation="right"
-                        label={{ value: '年化收益率（%）', angle: 90, position: 'right', offset: 10, fill: '#999', style: { textAnchor: 'middle' } }}
+                        label={{ value: '年化收益率（%）', angle: 90, position: 'right', offset: isMobile ? 5 : 10, fill: '#999', style: { textAnchor: 'middle', fontSize: isMobile ? 11 : 12 } }}
                         stroke="#999"
-                        tick={{ fill: '#999', fontSize: 12 }}
-                        domain={stats?.yAxisRightDomain || ['auto', 'auto']}
+                        tick={{ fill: '#999', fontSize: isMobile ? 10 : 12 }}
+                        domain={visibleYAxisDomain.right}
                         allowDataOverflow={false}
                         tickFormatter={(value) => `${Number(value).toFixed(2)}%`}
+                        width={isMobile ? 40 : 60}
                       />
                     )}
                     <Tooltip 
@@ -622,23 +791,36 @@ export default function Home() {
                         // 从数据中获取当前日期的年化收益率
                         const currentAnnualizedRate = data.annualizedReturnRate || 0;
                         
+                        const isMobileTooltip = isMobile;
                         return (
                           <div style={{
-                            backgroundColor: 'rgba(20, 20, 20, 0.95)',
+                            backgroundColor: 'rgba(20, 20, 20, 0.98)',
                             border: '1px solid #444',
-                            borderRadius: '6px',
-                            padding: '12px',
-                            color: '#fff'
+                            borderRadius: '8px',
+                            padding: isMobileTooltip ? '10px' : '12px',
+                            color: '#fff',
+                            maxWidth: isMobileTooltip ? '280px' : 'none',
+                            fontSize: isMobileTooltip ? '12px' : '13px',
+                            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.5)',
                           }}>
-                            <div style={{ marginBottom: '8px', fontWeight: 'bold', fontSize: '14px', borderBottom: '1px solid #444', paddingBottom: '6px' }}>
+                            <div style={{ 
+                              marginBottom: isMobileTooltip ? '6px' : '8px', 
+                              fontWeight: 'bold', 
+                              fontSize: isMobileTooltip ? '12px' : '14px', 
+                              borderBottom: '1px solid #444', 
+                              paddingBottom: isMobileTooltip ? '4px' : '6px' 
+                            }}>
                               日期: {label}
                             </div>
                             {payload.map((entry: any, index: number) => {
                               // 判断是收益率还是金额
                               const isReturnRate = entry.dataKey === 'annualizedReturnRate';
                               return (
-                                <div key={index} style={{ marginBottom: '4px', fontSize: '13px' }}>
-                                  <span style={{ color: entry.color, marginRight: '8px' }}>●</span>
+                                <div key={index} style={{ 
+                                  marginBottom: isMobileTooltip ? '3px' : '4px', 
+                                  fontSize: isMobileTooltip ? '11px' : '13px' 
+                                }}>
+                                  <span style={{ color: entry.color, marginRight: '6px' }}>●</span>
                                   <span style={{ color: '#e0e0e0' }}>{entry.name}: </span>
                                   <span style={{ color: '#fff', fontWeight: 'bold' }}>
                                     {isReturnRate 
@@ -649,8 +831,15 @@ export default function Home() {
                                 </div>
                               );
                             })}
-                            <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px solid #444' }}>
-                              <div style={{ marginBottom: '4px', fontSize: '13px' }}>
+                            <div style={{ 
+                              marginTop: isMobileTooltip ? '8px' : '10px', 
+                              paddingTop: isMobileTooltip ? '6px' : '8px', 
+                              borderTop: '1px solid #444' 
+                            }}>
+                              <div style={{ 
+                                marginBottom: isMobileTooltip ? '3px' : '4px', 
+                                fontSize: isMobileTooltip ? '11px' : '13px' 
+                              }}>
                                 <span style={{ color: '#888' }}>当前收益率: </span>
                                 <span style={{ 
                                   color: currentReturnRate >= 0 ? '#ff4d4f' : '#52c41a',
@@ -659,7 +848,7 @@ export default function Home() {
                                   {currentReturnRate >= 0 ? '+' : ''}{currentReturnRate.toFixed(2)}%
                                 </span>
                               </div>
-                              <div style={{ fontSize: '13px' }}>
+                              <div style={{ fontSize: isMobileTooltip ? '11px' : '13px' }}>
                                 <span style={{ color: '#888' }}>定投年化收益率: </span>
                                 <span style={{ 
                                   color: currentAnnualizedRate >= 0 ? '#ff4d4f' : '#52c41a',
@@ -674,9 +863,9 @@ export default function Home() {
                       }}
                     />
                     <Legend 
-                      wrapperStyle={{ paddingTop: '10px' }}
+                      wrapperStyle={{ paddingTop: isMobile ? '8px' : '10px' }}
                       iconType="line"
-                      formatter={(value) => <span style={{ color: '#e0e0e0', fontSize: '14px' }}>{value}</span>}
+                      formatter={(value) => <span style={{ color: '#e0e0e0', fontSize: isMobile ? '12px' : '14px' }}>{value}</span>}
                     />
                     {chartView === 'cost' ? (
                       <>
@@ -686,9 +875,9 @@ export default function Home() {
                           dataKey="totalInvestment" 
                           stroke="#00CED1" 
                           name="累计投入金额"
-                          strokeWidth={3}
+                          strokeWidth={isMobile ? 2.5 : 3}
                           dot={false}
-                          activeDot={{ r: 8, fill: '#00CED1' }}
+                          activeDot={{ r: isMobile ? 6 : 8, fill: '#00CED1' }}
                         />
                         <Line 
                           yAxisId="left"
@@ -696,9 +885,9 @@ export default function Home() {
                           dataKey="currentValue" 
                           stroke="#FFD700" 
                           name="当前份额价值"
-                          strokeWidth={3}
+                          strokeWidth={isMobile ? 2.5 : 3}
                           dot={false}
-                          activeDot={{ r: 8, fill: '#FFD700' }}
+                          activeDot={{ r: isMobile ? 6 : 8, fill: '#FFD700' }}
                         />
                       </>
                     ) : (
@@ -711,15 +900,15 @@ export default function Home() {
                           dataKey="annualizedReturnRate" 
                           stroke="#4ECDC4" 
                           name="定投年化收益率"
-                          strokeWidth={3}
+                          strokeWidth={isMobile ? 2.5 : 3}
                           dot={false}
-                          activeDot={{ r: 8, fill: "#4ECDC4" }}
+                          activeDot={{ r: isMobile ? 6 : 8, fill: "#4ECDC4" }}
                         />
                       </>
                     )}
                     <Brush
                       dataKey="date"
-                      height={30}
+                      height={isMobile ? 40 : 30}
                       stroke="#4a9eff"
                       fill="rgba(74, 158, 255, 0.1)"
                       startIndex={brushStartIndex}
@@ -730,7 +919,7 @@ export default function Home() {
                           setBrushEndIndex(e.endIndex);
                         }
                       }}
-                      tickFormatter={(value) => format(new Date(value), 'yyyy-MM-dd')}
+                      tickFormatter={(value) => format(new Date(value), isMobile ? 'MM/dd' : 'yyyy-MM-dd')}
                       onClick={(e) => {
                         // 阻止Brush的点击事件冒泡，避免触发视图切换
                         e?.stopPropagation?.();
@@ -740,22 +929,22 @@ export default function Home() {
                 </ResponsiveContainer>
               </div>
               {/* 缩放控制按钮 */}
-              <div className="flex items-center gap-2 mb-2 flex-shrink-0">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 mb-2 flex-shrink-0">
                 <button
                   onClick={() => {
                     setBrushStartIndex(0);
                     setBrushEndIndex(chartData.length - 1);
                   }}
-                  className="px-3 py-1.5 text-xs font-medium rounded-lg bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#2a2a2a] hover:border-[#4a9eff] hover:text-[#4a9eff] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#4a9eff]/50"
+                  className="px-3 py-2 md:py-1.5 text-xs font-medium rounded-lg bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#2a2a2a] hover:border-[#4a9eff] hover:text-[#4a9eff] active:scale-95 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#4a9eff]/50 touch-manipulation"
                   title="重置缩放"
                 >
                   🔍 重置缩放
                 </button>
-                <div className="text-xs text-[#888] flex-1">
+                <div className="text-xs text-[#888] flex-1 w-full sm:w-auto">
                   {chartData.length > 0 && (
-                    <span>
-                      显示范围: {format(new Date(chartData[brushStartIndex]?.date || chartData[0]?.date), 'yyyy-MM-dd')} 
-                      ~ {format(new Date(chartData[brushEndIndex || chartData.length - 1]?.date || chartData[chartData.length - 1]?.date), 'yyyy-MM-dd')}
+                    <span className="break-words">
+                      显示范围: {format(new Date(chartData[brushStartIndex]?.date || chartData[0]?.date), isMobile ? 'MM/dd' : 'yyyy-MM-dd')} 
+                      ~ {format(new Date(chartData[brushEndIndex || chartData.length - 1]?.date || chartData[chartData.length - 1]?.date), isMobile ? 'MM/dd' : 'yyyy-MM-dd')}
                     </span>
                   )}
                 </div>
@@ -763,19 +952,19 @@ export default function Home() {
               
               {/* 定投记录表格 */}
               {investmentRecords.length > 0 && (
-                <div className="bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl border border-[#2a2a2a] shadow-2xl overflow-hidden flex flex-col flex-shrink-0 h-[200px]">
-                  <div className="px-4 py-2 border-b border-[#2a2a2a] flex-shrink-0">
+                <div className="bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl border border-[#2a2a2a] shadow-2xl overflow-hidden flex flex-col flex-shrink-0 h-[200px] md:h-[200px]">
+                  <div className="px-3 md:px-4 py-2 border-b border-[#2a2a2a] flex-shrink-0">
                     <h3 className="text-white text-sm font-bold">定投记录</h3>
                   </div>
-                  <div className="overflow-x-auto overflow-y-auto flex-1">
-                    <table className="w-full">
-                      <thead className="sticky top-0 z-10">
-                        <tr className="border-b border-[#2a2a2a] bg-[#1a1a1a]">
-                          <th className="px-4 py-2 text-left text-xs font-medium text-[#888] uppercase tracking-wider">日期</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-[#888] uppercase tracking-wider">类型</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-[#888] uppercase tracking-wider">单位净值</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-[#888] uppercase tracking-wider">金额</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-[#888] uppercase tracking-wider">份额</th>
+                  <div className="overflow-x-auto overflow-y-auto flex-1 scroll-smooth" style={{ WebkitOverflowScrolling: 'touch' }}>
+                    <table className="w-full min-w-[600px] md:min-w-full">
+                      <thead className="sticky top-0 z-10 bg-[#1a1a1a]">
+                        <tr className="border-b border-[#2a2a2a]">
+                          <th className="px-3 md:px-4 py-2.5 md:py-2 text-left text-xs font-medium text-[#888] uppercase tracking-wider">日期</th>
+                          <th className="px-3 md:px-4 py-2.5 md:py-2 text-left text-xs font-medium text-[#888] uppercase tracking-wider">类型</th>
+                          <th className="px-3 md:px-4 py-2.5 md:py-2 text-left text-xs font-medium text-[#888] uppercase tracking-wider">单位净值</th>
+                          <th className="px-3 md:px-4 py-2.5 md:py-2 text-left text-xs font-medium text-[#888] uppercase tracking-wider">金额</th>
+                          <th className="px-3 md:px-4 py-2.5 md:py-2 text-left text-xs font-medium text-[#888] uppercase tracking-wider">份额</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[#2a2a2a]">
@@ -784,12 +973,14 @@ export default function Home() {
                           const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
                           const weekday = weekdays[date.getDay()];
                           return (
-                            <tr key={index} className="hover:bg-[#1f1f1f] transition-colors">
-                              <td className="px-4 py-2 whitespace-nowrap text-xs text-[#e0e0e0]">
-                                {format(date, 'yyyy-MM-dd')} {weekday}
+                            <tr key={index} className="hover:bg-[#1f1f1f] active:bg-[#252525] transition-colors">
+                              <td className="px-3 md:px-4 py-2.5 md:py-2 whitespace-nowrap text-xs text-[#e0e0e0]">
+                                <span className="hidden sm:inline">{format(date, 'yyyy-MM-dd')} </span>
+                                <span className="sm:hidden">{format(date, 'MM/dd')}</span>
+                                <span className="hidden md:inline"> {weekday}</span>
                               </td>
-                              <td className="px-4 py-2 whitespace-nowrap text-xs">
-                                <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                              <td className="px-3 md:px-4 py-2.5 md:py-2 whitespace-nowrap text-xs">
+                                <span className={`px-2 py-1 md:py-0.5 rounded text-xs font-medium ${
                                   record.type === '定投' 
                                     ? 'bg-[#4a9eff]/20 text-[#4a9eff] border border-[#4a9eff]/30' 
                                     : 'bg-[#52c41a]/20 text-[#52c41a] border border-[#52c41a]/30'
@@ -797,13 +988,13 @@ export default function Home() {
                                   {record.type}
                                 </span>
                               </td>
-                              <td className="px-4 py-2 whitespace-nowrap text-xs text-[#e0e0e0]">
+                              <td className="px-3 md:px-4 py-2.5 md:py-2 whitespace-nowrap text-xs text-[#e0e0e0]">
                                 {record.netValue.toFixed(2)}
                               </td>
-                              <td className="px-4 py-2 whitespace-nowrap text-xs text-[#e0e0e0]">
+                              <td className="px-3 md:px-4 py-2.5 md:py-2 whitespace-nowrap text-xs text-[#e0e0e0]">
                                 {Number(record.investmentAmount.toFixed(2)).toLocaleString('zh-CN')}
                               </td>
-                              <td className="px-4 py-2 whitespace-nowrap text-xs text-[#e0e0e0]">
+                              <td className="px-3 md:px-4 py-2.5 md:py-2 whitespace-nowrap text-xs text-[#e0e0e0]">
                                 {Number(record.shares.toFixed(2))}
                               </td>
                             </tr>

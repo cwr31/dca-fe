@@ -15,10 +15,22 @@
       sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* 移动端优化 */
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
   }
 
   body {
     @apply bg-[#0a0a0a] min-h-screen text-[#e0e0e0];
+    /* 防止移动端滚动时的橡皮筋效果 */
+    overscroll-behavior: none;
+  }
+  
+  /* 移动端输入框优化 */
+  @media (max-width: 768px) {
+    input, select, textarea, button {
+      font-size: 16px !important; /* 防止 iOS 自动缩放 */
+    }
   }
 }
 
@@ -38,6 +50,14 @@
 
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     @apply bg-[#4a4a4a];
+  }
+  
+  /* 移动端滚动优化 */
+  @media (max-width: 768px) {
+    .custom-scrollbar {
+      -webkit-overflow-scrolling: touch;
+      scroll-behavior: smooth;
+    }
   }
 }
 
