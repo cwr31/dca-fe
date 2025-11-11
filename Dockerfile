@@ -6,7 +6,7 @@ FROM node:20 AS builder
 WORKDIR /app
 
 # 复制 package 文件
-COPY package.json package-lock.json* ./
+COPY package.json package-lock.json ./
 
 # 安装 Node.js 依赖
 RUN npm ci
