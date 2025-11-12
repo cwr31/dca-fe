@@ -201,16 +201,24 @@ export default function Home() {
         const totalInvestment = typeof item.totalInvestment === 'number' ? item.totalInvestment : parseFloat(item.totalInvestment) || 0;
         const currentValue = typeof item.currentValue === 'number' ? item.currentValue : parseFloat(item.currentValue) || 0;
         const currentDate = new Date(item.date);
-        
+
+        // 确保数据有效
+        const validTotalInvestment = isFinite(totalInvestment) ? totalInvestment : 0;
+        const validCurrentValue = isFinite(currentValue) ? currentValue : 0;
+        const validAnnualizedRate = item.annualizedReturnRate !== undefined &&
+                                   item.annualizedReturnRate !== null &&
+                                   isFinite(item.annualizedReturnRate) &&
+                                   !isNaN(item.annualizedReturnRate)
+            ? Number(item.annualizedReturnRate.toFixed(2))
+            : 0; // 默认值为0而不是null
+
         return {
           date: format(new Date(item.date), 'yyyy-MM-dd'),
           dateObj: currentDate, // 保存日期对象用于计算
-          totalInvestment: Number(totalInvestment.toFixed(2)),  // 累计投入金额
-          currentValue: Number(currentValue.toFixed(2)),  // 当前份额价值（份额 × 单位净值）
-          // 收益率（百分比），直接使用，不转换为金额
-          annualizedReturnRate: item.annualizedReturnRate !== undefined && item.annualizedReturnRate !== null && isFinite(item.annualizedReturnRate) 
-            ? Number(item.annualizedReturnRate.toFixed(2)) 
-            : null, // 定投年化收益率（曲线，百分比）
+          totalInvestment: Number(validTotalInvestment.toFixed(2)),  // 累计投入金额
+          currentValue: Number(validCurrentValue.toFixed(2)),  // 当前份额价值（份额 × 单位净值）
+          // 收益率（百分比），确保有有效值
+          annualizedReturnRate: validAnnualizedRate,
         };
       });
 
@@ -225,18 +233,19 @@ export default function Home() {
 
       // 计算Y轴范围，使图表更好地展示数据（使用金额数据）
       const allValues = formattedData.flatMap(item => [
-        item.totalInvestment, 
+        item.totalInvestment,
         item.currentValue
-      ]).filter((v): v is number => v !== null && !isNaN(v) && isFinite(v));
-      
+      ]).filter((v): v is number => v !== null && !isNaN(v) && isFinite(v) && v >= 0);
+
       // 计算收益率Y轴范围（右侧Y轴）
       const allReturnRates = formattedData.flatMap(item => [
         item.annualizedReturnRate
       ]).filter((v): v is number => v !== null && !isNaN(v) && isFinite(v));
+
       if (allValues.length === 0) {
         // 如果没有有效数据，使用默认范围
         const yAxisDomain = [0, 1000];
-        const yAxisRightDomain = ['auto', 'auto'];
+        const yAxisRightDomain = [-10, 10];
         setChartData(formattedData);
         setStats({ ...backtestResult.stats, yAxisDomain, yAxisRightDomain, priceChangePercent });
         setInvestmentRecords(records);
@@ -245,30 +254,40 @@ export default function Home() {
         setBrushEndIndex(formattedData.length > 0 ? formattedData.length - 1 : 0);
         return;
       }
-      
+
       const minValue = Math.min(...allValues);
       const maxValue = Math.max(...allValues);
       const range = maxValue - minValue;
-      const padding = range * 0.1; // 10% 的边距
-      // 如果数据范围较小，从接近最小值开始；如果最小值接近0，则从0开始
-      const yAxisMin = minValue > range * 0.3 ? minValue - padding : Math.max(0, minValue - padding);
+      const padding = Math.max(range * 0.1, maxValue * 0.05); // 10% 的边距或最大值的5%
+      // 确保Y轴从0开始，便于对比
+      const yAxisMin = 0;
       const yAxisDomain = [
         yAxisMin,
-        maxValue + padding // 最大值加上边距
+        maxValue + padding
       ];
-      
+
       // 计算收益率Y轴范围（右侧Y轴）
-      let yAxisRightDomain: [string | number, string | number] = ['auto', 'auto'];
+      let yAxisRightDomain: [number, number] = [-10, 10]; // 默认范围
       if (allReturnRates.length > 0) {
         const minRate = Math.min(...allReturnRates);
         const maxRate = Math.max(...allReturnRates);
         const rateRange = maxRate - minRate;
-        const ratePadding = rateRange * 0.1 || 5; // 10% 的边距，至少5%
+        const ratePadding = Math.max(rateRange * 0.1, Math.abs(maxRate) * 0.05, 2); // 至少2%
         yAxisRightDomain = [
-          minRate - ratePadding,
-          maxRate + ratePadding
+          Math.max(minRate - ratePadding, -50), // 限制最大负值
+          Math.min(maxRate + ratePadding, 50)   // 限制最大正值
         ];
       }
+
+      // 调试：输出图表数据状态
+      console.log('图表数据准备完成:', {
+        dataLength: formattedData.length,
+        firstItem: formattedData[0],
+        lastItem: formattedData[formattedData.length - 1],
+        yAxisDomain,
+        yAxisRightDomain,
+        sampleData: formattedData.slice(0, 3)
+      });
 
       setChartData(formattedData);
       setStats({ ...backtestResult.stats, yAxisDomain, yAxisRightDomain, priceChangePercent, startDate: actualStartDate });
@@ -288,8 +307,8 @@ export default function Home() {
   const visibleYAxisDomain = useMemo(() => {
     if (!chartData || chartData.length === 0) {
       return {
-        left: stats?.yAxisDomain || ['auto', 'auto'],
-        right: stats?.yAxisRightDomain || ['auto', 'auto']
+        left: stats?.yAxisDomain || [0, 1000],
+        right: stats?.yAxisRightDomain || [-10, 10]
       };
     }
 
@@ -303,8 +322,8 @@ export default function Home() {
 
     if (visibleData.length === 0) {
       return {
-        left: stats?.yAxisDomain || ['auto', 'auto'],
-        right: stats?.yAxisRightDomain || ['auto', 'auto']
+        left: stats?.yAxisDomain || [0, 1000],
+        right: stats?.yAxisRightDomain || [-10, 10]
       };
     }
 
@@ -312,19 +331,18 @@ export default function Home() {
     const costValues = visibleData.flatMap(item => [
       item.totalInvestment,
       item.currentValue
-    ]).filter((v): v is number => v !== null && v !== undefined && !isNaN(v) && isFinite(v));
+    ]).filter((v): v is number => v !== null && v !== undefined && !isNaN(v) && isFinite(v) && v >= 0);
 
-    let leftDomain = stats?.yAxisDomain || ['auto', 'auto'];
+    let leftDomain: [number, number] = [0, 1000];
     if (costValues.length > 0) {
       const minValue = Math.min(...costValues);
       const maxValue = Math.max(...costValues);
       const range = maxValue - minValue;
       // 如果所有值相同，使用值的10%作为padding，或者至少使用1
-      const padding = range > 0 ? Math.max(range * 0.1, maxValue * 0.05) : Math.max(maxValue * 0.1, 1);
-      // 如果最小值较大（相对于范围），允许从更小的值开始；否则至少从0开始
-      const yAxisMin = minValue > range * 0.3 ? minValue - padding : Math.max(0, minValue - padding);
+      const padding = Math.max(range * 0.1, maxValue * 0.05, 1);
+      // 确保Y轴从0开始，便于对比
       leftDomain = [
-        yAxisMin,
+        0,
         maxValue + padding
       ];
     }
@@ -334,18 +352,16 @@ export default function Home() {
       .map(item => item.annualizedReturnRate)
       .filter((v): v is number => v !== null && v !== undefined && !isNaN(v) && isFinite(v));
 
-    let rightDomain = stats?.yAxisRightDomain || ['auto', 'auto'];
+    let rightDomain: [number, number] = [-10, 10];
     if (returnRates.length > 0) {
       const minRate = Math.min(...returnRates);
       const maxRate = Math.max(...returnRates);
       const rateRange = maxRate - minRate;
       // 如果所有值相同，使用值的10%作为padding，或者至少使用5%
-      const ratePadding = rateRange > 0 
-        ? Math.max(rateRange * 0.1, Math.abs(maxRate) * 0.05) 
-        : Math.max(Math.abs(maxRate) * 0.1, 5);
+      const ratePadding = Math.max(rateRange * 0.1, Math.abs(maxRate) * 0.05, 2);
       rightDomain = [
-        minRate - ratePadding,
-        maxRate + ratePadding
+        Math.max(minRate - ratePadding, -50),
+        Math.min(maxRate + ratePadding, 50)
       ];
     }
 
@@ -772,25 +788,27 @@ export default function Home() {
                         width={isMobile ? 40 : 60}
                       />
                     )}
-                    <Tooltip 
+                    <Tooltip
                       content={({ active, payload, label }) => {
                         if (!active || !payload || !payload.length) return null;
-                        
+
                         const data = payload[0].payload;
+                        console.log('Tooltip data:', data); // 调试输出
+
                         const totalInvestment = data.totalInvestment || 0;
                         const currentValue = data.currentValue || 0;
                         const currentDate = data.dateObj || new Date(data.date);
                         const startDate = stats?.startDate ? new Date(stats.startDate) : currentDate;
-                        
+
                         // 计算当前收益率
-                        const currentReturnRate = totalInvestment > 0 
-                          ? ((currentValue - totalInvestment) / totalInvestment) * 100 
+                        const currentReturnRate = totalInvestment > 0
+                          ? ((currentValue - totalInvestment) / totalInvestment) * 100
                           : 0;
-                        
+
                         // 使用后端计算的年化收益率数据，确保一致性
                         // 从数据中获取当前日期的年化收益率
                         const currentAnnualizedRate = data.annualizedReturnRate || 0;
-                        
+
                         const isMobileTooltip = isMobile;
                         return (
                           <div style={{
@@ -869,40 +887,40 @@ export default function Home() {
                     />
                     {chartView === 'cost' ? (
                       <>
-                        <Line 
+                        <Line
                           yAxisId="left"
-                          type="monotone" 
-                          dataKey="totalInvestment" 
-                          stroke="#00CED1" 
+                          type="monotone"
+                          dataKey="totalInvestment"
+                          stroke="#00CED1"
                           name="累计投入金额"
                           strokeWidth={isMobile ? 2.5 : 3}
-                          dot={false}
-                          activeDot={{ r: isMobile ? 6 : 8, fill: '#00CED1' }}
+                          dot={{ r: 1, fill: '#00CED1' }}
+                          activeDot={{ r: isMobile ? 6 : 8, fill: '#00CED1', stroke: '#00CED1', strokeWidth: 2 }}
                         />
-                        <Line 
+                        <Line
                           yAxisId="left"
                           type="monotone" 
                           dataKey="currentValue" 
                           stroke="#FFD700" 
                           name="当前份额价值"
                           strokeWidth={isMobile ? 2.5 : 3}
-                          dot={false}
-                          activeDot={{ r: isMobile ? 6 : 8, fill: '#FFD700' }}
+                          dot={{ r: 1, fill: '#FFD700' }}
+                          activeDot={{ r: isMobile ? 6 : 8, fill: '#FFD700', stroke: '#FFD700', strokeWidth: 2 }}
                         />
                       </>
                     ) : (
                       <>
                         {/* 0% 参考线，帮助区分盈利/亏损 */}
                         <ReferenceLine y={0} yAxisId="right" stroke="#888" strokeWidth={1} strokeDasharray="4 4" label={{ position: 'right', value: '0%', fill: '#888' }} />
-                        <Line 
+                        <Line
                           yAxisId="right"
-                          type="monotone" 
-                          dataKey="annualizedReturnRate" 
-                          stroke="#4ECDC4" 
+                          type="monotone"
+                          dataKey="annualizedReturnRate"
+                          stroke="#4ECDC4"
                           name="定投年化收益率"
                           strokeWidth={isMobile ? 2.5 : 3}
-                          dot={false}
-                          activeDot={{ r: isMobile ? 6 : 8, fill: "#4ECDC4" }}
+                          dot={{ r: 1, fill: '#4ECDC4' }}
+                          activeDot={{ r: isMobile ? 6 : 8, fill: "#4ECDC4", stroke: "#4ECDC4", strokeWidth: 2 }}
                         />
                       </>
                     )}
