@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chart Debug Test</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/recharts@2.10.3/umd/Recharts.js"></script>
+</head>
+<body>
+    <div id="root"></div>
+    <script>
+        // 使用你提供的实际数据格式
+        const mockData = [
+            { date: '2024-11-12', totalInvestment: 100, currentValue: 100, annualizedReturnRate: 0 },
+            { date: '2024-11-13', totalInvestment: 100, currentValue: 100.54, annualizedReturnRate: 195.38 },
+            { date: '2024-11-14', totalInvestment: 100, currentValue: 99.87, annualizedReturnRate: -23.58 }
+        ];
+
+        const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } = Recharts;
+
+        function TestChart() {
+            const [view, setView] = React.useState('cost');
+
+            console.log('TestChart渲染，数据:', mockData);
+            console.log('当前视图:', view);
+
+            return React.createElement('div', { style: { width: '100%', height: 400, background: '#1a1a1a', padding: 20 } },
+                React.createElement('div', null,
+                    React.createElement('button', {
+                        onClick: () => {
+                            console.log('切换到cost视图');
+                            setView('cost');
+                        },
+                        style: { marginRight: 10, padding: '5px 10px', background: view === 'cost' ? '#4a9eff' : '#333', color: 'white' }
+                    }, '成本视图'),
+                    React.createElement('button', {
+                        onClick: () => {
+                            console.log('切换到return视图');
+                            setView('return');
+                        },
+                        style: { padding: '5px 10px', background: view === 'return' ? '#4a9eff' : '#333', color: 'white' }
+                    }, '收益率视图')
+                ),
+                React.createElement(ResponsiveContainer, { width: '100%', height: '80%' },
+                    React.createElement(LineChart, { data: mockData, margin: { top: 5, right: 30, left: 20, bottom: 5 } },
+                        React.createElement(CartesianGrid, { strokeDasharray: '3 3', stroke: '#333' }),
+                        React.createElement(XAxis, { dataKey: 'date', stroke: '#999' }),
+                        view === 'cost' ? (
+                            React.createElement(YAxis, { yAxisId: 'left', stroke: '#999' })
+                        ) : (
+                            React.createElement(YAxis, { yAxisId: 'right', stroke: '#999' })
+                        ),
+                        React.createElement(Tooltip, null),
+                        React.createElement(Legend, null),
+                        view === 'cost' ? (
+                            React.createElement(React.Fragment, null,
+                                React.createElement(Line, {
+                                    yAxisId: 'left',
+                                    type: 'monotone',
+                                    dataKey: 'totalInvestment',
+                                    stroke: '#00CED1',
+                                    name: '累计投入金额',
+                                    dot: { r: 3 }
+                                }),
+                                React.createElement(Line, {
+                                    yAxisId: 'left',
+                                    type: 'monotone',
+                                    dataKey: 'currentValue',
+                                    stroke: '#FFD700',
+                                    name: '当前份额价值',
+                                    dot: { r: 3 }
+                                })
+                            )
+                        ) : (
+                            React.createElement(Line, {
+                                yAxisId: 'right',
+                                type: 'monotone',
+                                dataKey: 'annualizedReturnRate',
+                                stroke: '#4ECDC4',
+                                name: '年化收益率',
+                                dot: { r: 3 }
+                            })
+                        )
+                    )
+                )
+            );
+        }
+
+        // 渲染测试图表
+        ReactDOM.render(
+            React.createElement(TestChart),
+            document.getElementById('root')
+        );
+    </script>
+</body>
+</html>
+
+<style>
+body {
+    background: #0a0a0a;
+    color: white;
+    font-family: Arial, sans-serif;
+}
+</style>
+
+<script>
+// 添加全局错误捕获
+window.addEventListener('error', function(e) {
+    console.error('全局错误:', e.error);
+});
+
+// 添加Recharts错误捕获
+if (window.Recharts) {
+    console.log('Recharts已加载');
+} else {
+    console.error('Recharts未加载');
+}
+</script>

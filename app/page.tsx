@@ -1,8 +1,14 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Brush, ReferenceLine } from 'recharts';
 import { format, subYears } from 'date-fns';
+import dynamic from 'next/dynamic';
+
+// 动态导入Chart.js组件以避免SSR问题
+const InvestmentChart = dynamic(() => import('./components/InvestmentChart'), {
+  ssr: false,
+  loading: () => <div className="w-full h-full flex items-center justify-center"><div className="text-center text-[#666]"><div className="text-lg mb-2">📊</div><div className="text-sm">正在加载图表...</div></div></div>
+});
 
 interface FundData {
   date: string;
@@ -303,73 +309,6 @@ export default function Home() {
     }
   };
 
-  // 根据可见数据范围计算y轴域
-  const visibleYAxisDomain = useMemo(() => {
-    if (!chartData || chartData.length === 0) {
-      return {
-        left: stats?.yAxisDomain || [0, 1000],
-        right: stats?.yAxisRightDomain || [-10, 10]
-      };
-    }
-
-    // 获取可见数据范围，确保索引在有效范围内
-    const startIdx = Math.max(0, Math.min(brushStartIndex, chartData.length - 1));
-    // brushEndIndex 为 0 可能表示未初始化，使用最后一个索引；否则使用 brushEndIndex
-    const endIdx = brushEndIndex > 0 && brushEndIndex < chartData.length
-      ? Math.max(brushEndIndex, startIdx) // 确保 endIdx >= startIdx
-      : chartData.length - 1;
-    const visibleData = chartData.slice(startIdx, endIdx + 1);
-
-    if (visibleData.length === 0) {
-      return {
-        left: stats?.yAxisDomain || [0, 1000],
-        right: stats?.yAxisRightDomain || [-10, 10]
-      };
-    }
-
-    // 计算成本收益视图的y轴域（左侧y轴）
-    const costValues = visibleData.flatMap(item => [
-      item.totalInvestment,
-      item.currentValue
-    ]).filter((v): v is number => v !== null && v !== undefined && !isNaN(v) && isFinite(v) && v >= 0);
-
-    let leftDomain: [number, number] = [0, 1000];
-    if (costValues.length > 0) {
-      const minValue = Math.min(...costValues);
-      const maxValue = Math.max(...costValues);
-      const range = maxValue - minValue;
-      // 如果所有值相同，使用值的10%作为padding，或者至少使用1
-      const padding = Math.max(range * 0.1, maxValue * 0.05, 1);
-      // 确保Y轴从0开始，便于对比
-      leftDomain = [
-        0,
-        maxValue + padding
-      ];
-    }
-
-    // 计算年化收益率视图的y轴域（右侧y轴）
-    const returnRates = visibleData
-      .map(item => item.annualizedReturnRate)
-      .filter((v): v is number => v !== null && v !== undefined && !isNaN(v) && isFinite(v));
-
-    let rightDomain: [number, number] = [-10, 10];
-    if (returnRates.length > 0) {
-      const minRate = Math.min(...returnRates);
-      const maxRate = Math.max(...returnRates);
-      const rateRange = maxRate - minRate;
-      // 如果所有值相同，使用值的10%作为padding，或者至少使用5%
-      const ratePadding = Math.max(rateRange * 0.1, Math.abs(maxRate) * 0.05, 2);
-      rightDomain = [
-        Math.max(minRate - ratePadding, -50),
-        Math.min(maxRate + ratePadding, 50)
-      ];
-    }
-
-    return {
-      left: leftDomain,
-      right: rightDomain
-    };
-  }, [chartData, brushStartIndex, brushEndIndex, stats?.yAxisDomain, stats?.yAxisRightDomain]);
 
   return (
     <div className="w-full h-screen overflow-hidden bg-gradient-to-br from-[#0a0a0a] via-[#0f0f0f] to-[#0a0a0a]">
@@ -749,196 +688,17 @@ export default function Home() {
               <div
                 className="flex-1 bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl p-2 md:p-4 border border-[#2a2a2a] shadow-2xl mb-2" style={{ minHeight: '400px' }}
               >
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart
-                    data={chartData}
-                    margin={{ top: 5, right: isMobile ? 20 : 50, left: isMobile ? 20 : 50, bottom: isMobile ? 60 : 50 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#333" opacity={0.3} />
-                    {console.log('当前图表视图和数据:', { chartView, chartDataLength: chartData.length, firstItem: chartData[0], lastItem: chartData[chartData.length - 1] })}
-                    <XAxis 
-                      dataKey="date" 
-                      angle={isMobile ? -60 : -45}
-                      textAnchor="end"
-                      height={isMobile ? 100 : 80}
-                      interval="preserveStartEnd"
-                      stroke="#999"
-                      tick={{ fill: '#999', fontSize: isMobile ? 10 : 12 }}
-                      label={{ value: '时间', position: 'insideBottom', offset: isMobile ? -5 : -10, fill: '#999', style: { fontSize: isMobile ? 11 : 12 } }}
-                    />
-                    {chartView === 'cost' ? (
-                      <YAxis 
-                        yAxisId="left"
-                        label={{ value: '金额（元）', angle: -90, position: 'left', offset: isMobile ? 5 : 10, fill: '#999', style: { textAnchor: 'middle', fontSize: isMobile ? 11 : 12 } }}
-                        stroke="#999"
-                        tick={{ fill: '#999', fontSize: isMobile ? 10 : 12 }}
-                        domain={visibleYAxisDomain.left}
-                        allowDataOverflow={false}
-                        width={isMobile ? 40 : 60}
-                      />
-                    ) : (
-                      <YAxis 
-                        yAxisId="right"
-                        orientation="right"
-                        label={{ value: '年化收益率（%）', angle: 90, position: 'right', offset: isMobile ? 5 : 10, fill: '#999', style: { textAnchor: 'middle', fontSize: isMobile ? 11 : 12 } }}
-                        stroke="#999"
-                        tick={{ fill: '#999', fontSize: isMobile ? 10 : 12 }}
-                        domain={visibleYAxisDomain.right}
-                        allowDataOverflow={false}
-                        tickFormatter={(value) => `${Number(value).toFixed(2)}%`}
-                        width={isMobile ? 40 : 60}
-                      />
-                    )}
-                    <Tooltip
-                      content={({ active, payload, label }) => {
-                        if (!active || !payload || !payload.length) return null;
-
-                        const data = payload[0].payload;
-                        console.log('Tooltip data:', data); // 调试输出
-
-                        const totalInvestment = data.totalInvestment || 0;
-                        const currentValue = data.currentValue || 0;
-                        const currentDate = data.dateObj || new Date(data.date);
-                        const startDate = stats?.startDate ? new Date(stats.startDate) : currentDate;
-
-                        // 计算当前收益率
-                        const currentReturnRate = totalInvestment > 0
-                          ? ((currentValue - totalInvestment) / totalInvestment) * 100
-                          : 0;
-
-                        // 使用后端计算的年化收益率数据，确保一致性
-                        // 从数据中获取当前日期的年化收益率
-                        const currentAnnualizedRate = data.annualizedReturnRate || 0;
-
-                        const isMobileTooltip = isMobile;
-                        return (
-                          <div style={{
-                            backgroundColor: 'rgba(20, 20, 20, 0.98)',
-                            border: '1px solid #444',
-                            borderRadius: '8px',
-                            padding: isMobileTooltip ? '10px' : '12px',
-                            color: '#fff',
-                            maxWidth: isMobileTooltip ? '280px' : 'none',
-                            fontSize: isMobileTooltip ? '12px' : '13px',
-                            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.5)',
-                          }}>
-                            <div style={{ 
-                              marginBottom: isMobileTooltip ? '6px' : '8px', 
-                              fontWeight: 'bold', 
-                              fontSize: isMobileTooltip ? '12px' : '14px', 
-                              borderBottom: '1px solid #444', 
-                              paddingBottom: isMobileTooltip ? '4px' : '6px' 
-                            }}>
-                              日期: {label}
-                            </div>
-                            {payload.map((entry: any, index: number) => {
-                              // 判断是收益率还是金额
-                              const isReturnRate = entry.dataKey === 'annualizedReturnRate';
-                              return (
-                                <div key={index} style={{ 
-                                  marginBottom: isMobileTooltip ? '3px' : '4px', 
-                                  fontSize: isMobileTooltip ? '11px' : '13px' 
-                                }}>
-                                  <span style={{ color: entry.color, marginRight: '6px' }}>●</span>
-                                  <span style={{ color: '#e0e0e0' }}>{entry.name}: </span>
-                                  <span style={{ color: '#fff', fontWeight: 'bold' }}>
-                                    {isReturnRate 
-                                      ? `${entry.value >= 0 ? '+' : ''}${entry.value.toFixed(2)}%`
-                                      : `¥${Number(entry.value.toFixed(2)).toLocaleString('zh-CN')}`
-                                    }
-                                  </span>
-                                </div>
-                              );
-                            })}
-                            <div style={{ 
-                              marginTop: isMobileTooltip ? '8px' : '10px', 
-                              paddingTop: isMobileTooltip ? '6px' : '8px', 
-                              borderTop: '1px solid #444' 
-                            }}>
-                              <div style={{ 
-                                marginBottom: isMobileTooltip ? '3px' : '4px', 
-                                fontSize: isMobileTooltip ? '11px' : '13px' 
-                              }}>
-                                <span style={{ color: '#888' }}>当前收益率: </span>
-                                <span style={{ 
-                                  color: currentReturnRate >= 0 ? '#ff4d4f' : '#52c41a',
-                                  fontWeight: 'bold'
-                                }}>
-                                  {currentReturnRate >= 0 ? '+' : ''}{currentReturnRate.toFixed(2)}%
-                                </span>
-                              </div>
-                              <div style={{ fontSize: isMobileTooltip ? '11px' : '13px' }}>
-                                <span style={{ color: '#888' }}>定投年化收益率: </span>
-                                <span style={{ 
-                                  color: currentAnnualizedRate >= 0 ? '#ff4d4f' : '#52c41a',
-                                  fontWeight: 'bold'
-                                }}>
-                                  {currentAnnualizedRate >= 0 ? '+' : ''}{currentAnnualizedRate.toFixed(2)}%
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      }}
-                    />
-                    <Legend 
-                      wrapperStyle={{ paddingTop: isMobile ? '8px' : '10px' }}
-                      iconType="line"
-                      formatter={(value) => <span style={{ color: '#e0e0e0', fontSize: isMobile ? '12px' : '14px' }}>{value}</span>}
-                    />
-                    {chartView === 'cost' ? (
-                      <>
-                        {console.log('渲染成本视图Line组件', { chartView, yAxisId: 'left', dataKeys: ['totalInvestment', 'currentValue'], chartDataLength: chartData.length })}
-                        <Line
-                          yAxisId="left"
-                          type="monotone"
-                          dataKey="totalInvestment"
-                          stroke="#00CED1"
-                          name="累计投入金额"
-                        />
-                        <Line
-                          yAxisId="left"
-                          type="monotone"
-                          dataKey="currentValue"
-                          stroke="#FFD700"
-                          name="当前份额价值"
-                        />
-                      </>
-                    ) : (
-                      <>
-                        {console.log('渲染收益率视图Line组件', { chartView, yAxisId: 'right', dataKeys: ['annualizedReturnRate'], chartDataLength: chartData.length })}
-                        {/* 0% 参考线，帮助区分盈利/亏损 */}
-                        <ReferenceLine y={0} yAxisId="right" stroke="#888" strokeWidth={1} strokeDasharray="4 4" label={{ position: 'right', value: '0%', fill: '#888' }} />
-                        <Line
-                          yAxisId="right"
-                          type="monotone"
-                          dataKey="annualizedReturnRate"
-                          stroke="#4ECDC4"
-                          name="定投年化收益率"
-                        />
-                      </>
-                    )}
-                    <Brush
-                      dataKey="date"
-                      height={isMobile ? 40 : 30}
-                      stroke="#4a9eff"
-                      fill="rgba(74, 158, 255, 0.1)"
-                      startIndex={brushStartIndex}
-                      endIndex={brushEndIndex > 0 ? brushEndIndex : (chartData.length > 0 ? chartData.length - 1 : 0)}
-                      onChange={(e) => {
-                        if (e && typeof e.startIndex === 'number' && typeof e.endIndex === 'number') {
-                          setBrushStartIndex(e.startIndex);
-                          setBrushEndIndex(e.endIndex);
-                        }
-                      }}
-                      tickFormatter={(value) => format(new Date(value), isMobile ? 'MM/dd' : 'yyyy-MM-dd')}
-                      onClick={(e) => {
-                        // 阻止Brush的点击事件冒泡，避免触发视图切换
-                        e?.stopPropagation?.();
-                      }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
+                <InvestmentChart
+                  data={chartData}
+                  chartView={chartView}
+                  isMobile={isMobile}
+                  onZoomChange={(start, end) => {
+                    setBrushStartIndex(start);
+                    setBrushEndIndex(end);
+                  }}
+                  brushStartIndex={brushStartIndex}
+                  brushEndIndex={brushEndIndex > 0 ? brushEndIndex : (chartData.length > 0 ? chartData.length - 1 : 0)}
+                />
               </div>
               {/* 缩放控制按钮 */}
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 mb-2 flex-shrink-0">
