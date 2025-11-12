@@ -161,9 +161,9 @@ export default function InvestmentChart({
       layout: {
         padding: {
           top: isMobile ? 5 : 10,
-          right: isMobile ? 5 : (isReturnView ? 40 : 25),
+          right: isMobile ? 5 : 25,
           bottom: isMobile ? 30 : 50,
-          left: isMobile ? 5 : (isReturnView ? 25 : 40),
+          left: isMobile ? 5 : 40,
         },
       },
       plugins: {
@@ -185,8 +185,7 @@ export default function InvestmentChart({
             boxWidth: isMobile ? 6 : 8,
             boxHeight: isMobile ? 6 : 8,
           },
-          align: 'end' as const,
-          rtl: true,
+          align: 'center' as const,
         },
         tooltip: {
           backgroundColor: 'rgba(10, 10, 10, 0.95)',
@@ -373,7 +372,7 @@ export default function InvestmentChart({
         },
         y: {
           type: 'linear' as const,
-          position: isReturnView ? 'right' as const : 'left' as const,
+          position: 'left' as const,
           grid: {
             color: 'rgba(51, 51, 51, 0.2)',
             drawBorder: false,
