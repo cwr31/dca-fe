@@ -79,10 +79,17 @@ export default function InvestmentChart({
             borderColor: '#00CED1',
             backgroundColor: 'rgba(0, 206, 209, 0.1)',
             fill: false,
-            tension: 0.1,
+            tension: 0.2,
             pointRadius: 0,
             pointHoverRadius: 6,
-            borderWidth: 2,
+            pointBackgroundColor: '#00CED1',
+            pointBorderColor: '#00CED1',
+            pointHoverBackgroundColor: '#00CED1',
+            pointHoverBorderColor: '#ffffff',
+            pointHoverBorderWidth: 2,
+            borderWidth: 2.5,
+            borderCapStyle: 'round' as const,
+            borderJoinStyle: 'round' as const,
           },
           {
             label: '当前份额价值',
@@ -90,10 +97,17 @@ export default function InvestmentChart({
             borderColor: '#FFD700',
             backgroundColor: 'rgba(255, 215, 0, 0.1)',
             fill: false,
-            tension: 0.1,
+            tension: 0.2,
             pointRadius: 0,
             pointHoverRadius: 6,
-            borderWidth: 2,
+            pointBackgroundColor: '#FFD700',
+            pointBorderColor: '#FFD700',
+            pointHoverBackgroundColor: '#FFD700',
+            pointHoverBorderColor: '#ffffff',
+            pointHoverBorderWidth: 2,
+            borderWidth: 2.5,
+            borderCapStyle: 'round' as const,
+            borderJoinStyle: 'round' as const,
           },
         ],
       };
@@ -105,12 +119,28 @@ export default function InvestmentChart({
             label: '定投年化收益率',
             data: data.map(item => item.annualizedReturnRate),
             borderColor: '#4ECDC4',
-            backgroundColor: 'rgba(78, 205, 196, 0.1)',
+            backgroundColor: (context: any) => {
+              const chart = context.chart;
+              const { ctx, chartArea } = chart;
+              if (!chartArea) return '#4ECDC4';
+
+              const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+              gradient.addColorStop(0, 'rgba(78, 205, 196, 0.3)');
+              gradient.addColorStop(1, 'rgba(78, 205, 196, 0.05)');
+              return gradient;
+            },
             fill: true,
-            tension: 0.1,
+            tension: 0.2,
             pointRadius: 0,
             pointHoverRadius: 6,
-            borderWidth: 2,
+            pointBackgroundColor: '#4ECDC4',
+            pointBorderColor: '#4ECDC4',
+            pointHoverBackgroundColor: '#4ECDC4',
+            pointHoverBorderColor: '#ffffff',
+            pointHoverBorderWidth: 2,
+            borderWidth: 2.5,
+            borderCapStyle: 'round' as const,
+            borderJoinStyle: 'round' as const,
           },
         ],
       };
@@ -128,37 +158,54 @@ export default function InvestmentChart({
         intersect: false,
         mode: 'index' as const,
       },
+      layout: {
+        padding: {
+          top: isMobile ? 5 : 10,
+          right: isMobile ? 5 : (isReturnView ? 40 : 25),
+          bottom: isMobile ? 30 : 50,
+          left: isMobile ? 5 : (isReturnView ? 25 : 40),
+        },
+      },
       plugins: {
         title: {
           display: false,
         },
         legend: {
           display: true,
-          position: 'top' as const,
+          position: isMobile ? 'top' as const : 'top' as const,
           labels: {
             color: '#e0e0e0',
             font: {
-              size: isMobile ? 12 : 14,
+              size: isMobile ? 10 : 12,
+              weight: 500,
             },
-            padding: 15,
+            padding: isMobile ? 8 : 15,
             usePointStyle: true,
+            pointStyle: 'circle' as const,
+            boxWidth: isMobile ? 6 : 8,
+            boxHeight: isMobile ? 6 : 8,
           },
+          align: 'end' as const,
+          rtl: true,
         },
         tooltip: {
-          backgroundColor: 'rgba(20, 20, 20, 0.98)',
-          titleColor: '#e0e0e0',
+          backgroundColor: 'rgba(10, 10, 10, 0.95)',
+          titleColor: '#4a9eff',
           bodyColor: '#e0e0e0',
-          borderColor: '#444',
+          borderColor: '#4a9eff',
           borderWidth: 1,
           cornerRadius: 8,
           displayColors: true,
           padding: 12,
           titleFont: {
             size: isMobile ? 12 : 14,
+            weight: 600,
           },
           bodyFont: {
             size: isMobile ? 11 : 13,
           },
+          boxPadding: 6,
+          usePointStyle: true,
           callbacks: {
             title: (items: any[]) => {
               if (items.length > 0) {
@@ -198,15 +245,29 @@ export default function InvestmentChart({
           zoom: {
             wheel: {
               enabled: true,
+              modifierKey: 'ctrl' as const,
             },
             pinch: {
               enabled: true,
+            },
+            drag: {
+              enabled: true,
+              backgroundColor: 'rgba(74, 158, 255, 0.1)',
+              borderColor: 'rgba(74, 158, 255, 0.3)',
+              borderWidth: 1,
             },
             mode: 'x' as const,
           },
           pan: {
             enabled: true,
             mode: 'x' as const,
+            modifierKey: 'shift' as const,
+          },
+          limits: {
+            x: {
+              min: 'original' as const,
+              max: 'original' as const,
+            },
           },
         },
         annotation: isReturnView ? {
@@ -220,12 +281,15 @@ export default function InvestmentChart({
               borderDash: [4, 4],
               label: {
                 display: true,
-                content: '0%',
+                content: '0% 基准线',
                 position: 'end' as const,
                 color: '#888',
                 font: {
-                  size: 12,
+                  size: 10,
+                  weight: 500,
                 },
+                backgroundColor: 'transparent',
+                padding: 4,
               },
             },
           },
@@ -235,24 +299,75 @@ export default function InvestmentChart({
         x: {
           type: 'category' as const,
           grid: {
-            color: 'rgba(51, 51, 51, 0.3)',
+            color: 'rgba(51, 51, 51, 0.2)',
             drawBorder: false,
+            drawOnChartArea: true,
+            drawTicks: false,
+            tickLength: 0,
           },
           ticks: {
             color: '#999',
             font: {
-              size: isMobile ? 10 : 12,
+              size: isMobile ? 9 : 11,
+              weight: 'normal' as const,
             },
-            maxRotation: isMobile ? -60 : -45,
-            minRotation: isMobile ? -60 : -45,
+            maxRotation: 0,
+            minRotation: 0,
             autoSkip: true,
-            maxTicksLimit: isMobile ? 5 : 10,
+            autoSkipPadding: isMobile ? 20 : 40,
+            maxTicksLimit: isMobile ? 4 : 8,
+            padding: 5,
             callback: function(this: any, value: any, index: number) {
               const label = this.getLabelForValue(value);
-              if (isMobile) {
-                return label.split('-').slice(1).join('/'); // MM/DD格式
+              if (!label) return '';
+
+              try {
+                const date = new Date(label);
+                if (isNaN(date.getTime())) {
+                  // 如果不是有效日期，按原格式处理
+                  if (isMobile) {
+                    const parts = label.split('-');
+                    if (parts.length >= 2) {
+                      return `${parts[1]}/${parts[2]}`; // MM/DD
+                    }
+                    return label;
+                  }
+                  return label;
+                }
+
+                // 格式化日期
+                if (isMobile) {
+                  return `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')}`;
+                } else {
+                  // 桌面端显示更完整的信息
+                  const now = new Date();
+                  const diffTime = Math.abs(now.getTime() - date.getTime());
+                  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                  if (diffDays < 30) {
+                    return `${date.getMonth() + 1}/${date.getDate()}`;
+                  } else if (diffDays < 365) {
+                    return `${date.getMonth() + 1}月`;
+                  } else {
+                    return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+                  }
+                }
+              } catch (error) {
+                return label;
               }
-              return label;
+            },
+          },
+          title: {
+            display: true,
+            text: '时间',
+            color: '#999',
+            font: {
+              size: isMobile ? 10 : 12,
+              weight: 500,
+            },
+            padding: {
+              top: isMobile ? 10 : 15,
+              bottom: 5,
             },
           },
         },
@@ -260,14 +375,19 @@ export default function InvestmentChart({
           type: 'linear' as const,
           position: isReturnView ? 'right' as const : 'left' as const,
           grid: {
-            color: 'rgba(51, 51, 51, 0.3)',
+            color: 'rgba(51, 51, 51, 0.2)',
             drawBorder: false,
+            drawOnChartArea: true,
+            drawTicks: false,
+            tickLength: 0,
           },
           ticks: {
             color: '#999',
             font: {
-              size: isMobile ? 10 : 12,
+              size: isMobile ? 9 : 11,
+              weight: 'normal' as const,
             },
+            padding: 5,
             callback: function(this: any, value: any) {
               if (isReturnView) {
                 return `${value.toFixed(1)}%`;
@@ -280,7 +400,12 @@ export default function InvestmentChart({
             text: isReturnView ? '年化收益率（%）' : '金额（元）',
             color: '#999',
             font: {
-              size: isMobile ? 11 : 12,
+              size: isMobile ? 10 : 12,
+              weight: 500,
+            },
+            padding: {
+              top: 5,
+              bottom: isMobile ? 10 : 15,
             },
           },
         },
