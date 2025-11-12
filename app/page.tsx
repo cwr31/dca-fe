@@ -746,15 +746,16 @@ export default function Home() {
                   {chartView === 'cost' ? '📈 切换到年化收益率' : '💰 切换到成本收益'}
                 </button>
               </div>
-              <div 
-                className="flex-1 min-h-0 bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl p-2 md:p-4 border border-[#2a2a2a] shadow-2xl mb-2"
+              <div
+                className="flex-1 bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl p-2 md:p-4 border border-[#2a2a2a] shadow-2xl mb-2" style={{ minHeight: '400px' }}
               >
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart 
-                    data={chartData} 
+                  <LineChart
+                    data={chartData}
                     margin={{ top: 5, right: isMobile ? 20 : 50, left: isMobile ? 20 : 50, bottom: isMobile ? 60 : 50 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke="#333" opacity={0.3} />
+                    {console.log('当前图表视图和数据:', { chartView, chartDataLength: chartData.length, firstItem: chartData[0], lastItem: chartData[chartData.length - 1] })}
                     <XAxis 
                       dataKey="date" 
                       angle={isMobile ? -60 : -45}
@@ -887,29 +888,25 @@ export default function Home() {
                     />
                     {chartView === 'cost' ? (
                       <>
+                        {console.log('渲染成本视图Line组件', { chartView, yAxisId: 'left', dataKeys: ['totalInvestment', 'currentValue'], chartDataLength: chartData.length })}
                         <Line
                           yAxisId="left"
                           type="monotone"
                           dataKey="totalInvestment"
                           stroke="#00CED1"
                           name="累计投入金额"
-                          strokeWidth={isMobile ? 2.5 : 3}
-                          dot={{ r: 1, fill: '#00CED1' }}
-                          activeDot={{ r: isMobile ? 6 : 8, fill: '#00CED1', stroke: '#00CED1', strokeWidth: 2 }}
                         />
                         <Line
                           yAxisId="left"
-                          type="monotone" 
-                          dataKey="currentValue" 
-                          stroke="#FFD700" 
+                          type="monotone"
+                          dataKey="currentValue"
+                          stroke="#FFD700"
                           name="当前份额价值"
-                          strokeWidth={isMobile ? 2.5 : 3}
-                          dot={{ r: 1, fill: '#FFD700' }}
-                          activeDot={{ r: isMobile ? 6 : 8, fill: '#FFD700', stroke: '#FFD700', strokeWidth: 2 }}
                         />
                       </>
                     ) : (
                       <>
+                        {console.log('渲染收益率视图Line组件', { chartView, yAxisId: 'right', dataKeys: ['annualizedReturnRate'], chartDataLength: chartData.length })}
                         {/* 0% 参考线，帮助区分盈利/亏损 */}
                         <ReferenceLine y={0} yAxisId="right" stroke="#888" strokeWidth={1} strokeDasharray="4 4" label={{ position: 'right', value: '0%', fill: '#888' }} />
                         <Line
@@ -918,9 +915,6 @@ export default function Home() {
                           dataKey="annualizedReturnRate"
                           stroke="#4ECDC4"
                           name="定投年化收益率"
-                          strokeWidth={isMobile ? 2.5 : 3}
-                          dot={{ r: 1, fill: '#4ECDC4' }}
-                          activeDot={{ r: isMobile ? 6 : 8, fill: "#4ECDC4", stroke: "#4ECDC4", strokeWidth: 2 }}
                         />
                       </>
                     )}
