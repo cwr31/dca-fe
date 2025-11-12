@@ -1,36 +1,17 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler,
-  ChartOptions,
-  ChartData,
-} from 'chart.js';
-import { Line } from 'react-chartjs-2';
-import zoomPlugin from 'chartjs-plugin-zoom';
-import annotationPlugin from 'chartjs-plugin-annotation';
-
-// 注册Chart.js组件
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler,
-  zoomPlugin,
-  annotationPlugin
-);
+  createChart,
+  IChartApi,
+  LineStyle,
+  CrosshairMode,
+  ISeriesApi,
+  BaselineSeries,
+  LineSeries,
+  LineSeriesOptions,
+  BaselineSeriesOptions
+} from 'lightweight-charts';
 
 interface ChartDataPoint {
   date: string;
@@ -56,398 +37,379 @@ export default function InvestmentChart({
   brushStartIndex = 0,
   brushEndIndex = 0,
 }: InvestmentChartProps) {
-  const chartRef = useRef<ChartJS<'line'>>(null);
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<any[]>([]);
+  const tooltipRef = useRef<HTMLDivElement | null>(null);
+  const [isChartReady, setIsChartReady] = useState(false);
 
-  // 转换数据为Chart.js格式
-  const chartData = React.useMemo(() => {
-    if (!data || data.length === 0) {
-      return {
-        labels: [],
-        datasets: [],
-      };
-    }
+  // 转换数据为 lightweight-charts 格式
+  const convertData = useCallback(() => {
+    if (!data || data.length === 0) return { costData: [], valueData: [], returnData: [] };
 
-    const labels = data.map(item => item.date);
+    const costData = data.map(item => ({
+      time: item.date as any,
+      value: item.totalInvestment,
+    }));
 
-    if (chartView === 'cost') {
-      return {
-        labels,
-        datasets: [
-          {
-            label: '累计投入金额',
-            data: data.map(item => item.totalInvestment),
-            borderColor: '#00CED1',
-            backgroundColor: 'rgba(0, 206, 209, 0.1)',
-            fill: false,
-            tension: 0.2,
-            pointRadius: 0,
-            pointHoverRadius: 6,
-            pointBackgroundColor: '#00CED1',
-            pointBorderColor: '#00CED1',
-            pointHoverBackgroundColor: '#00CED1',
-            pointHoverBorderColor: '#ffffff',
-            pointHoverBorderWidth: 2,
-            borderWidth: 2.5,
-            borderCapStyle: 'round' as const,
-            borderJoinStyle: 'round' as const,
-          },
-          {
-            label: '当前份额价值',
-            data: data.map(item => item.currentValue),
-            borderColor: '#FFD700',
-            backgroundColor: 'rgba(255, 215, 0, 0.1)',
-            fill: false,
-            tension: 0.2,
-            pointRadius: 0,
-            pointHoverRadius: 6,
-            pointBackgroundColor: '#FFD700',
-            pointBorderColor: '#FFD700',
-            pointHoverBackgroundColor: '#FFD700',
-            pointHoverBorderColor: '#ffffff',
-            pointHoverBorderWidth: 2,
-            borderWidth: 2.5,
-            borderCapStyle: 'round' as const,
-            borderJoinStyle: 'round' as const,
-          },
-        ],
-      };
-    } else {
-      return {
-        labels,
-        datasets: [
-          {
-            label: '定投年化收益率',
-            data: data.map(item => item.annualizedReturnRate),
-            borderColor: '#4ECDC4',
-            backgroundColor: (context: any) => {
-              const chart = context.chart;
-              const { ctx, chartArea } = chart;
-              if (!chartArea) return '#4ECDC4';
+    const valueData = data.map(item => ({
+      time: item.date as any,
+      value: item.currentValue,
+    }));
 
-              const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-              gradient.addColorStop(0, 'rgba(78, 205, 196, 0.3)');
-              gradient.addColorStop(1, 'rgba(78, 205, 196, 0.05)');
-              return gradient;
-            },
-            fill: true,
-            tension: 0.2,
-            pointRadius: 0,
-            pointHoverRadius: 6,
-            pointBackgroundColor: '#4ECDC4',
-            pointBorderColor: '#4ECDC4',
-            pointHoverBackgroundColor: '#4ECDC4',
-            pointHoverBorderColor: '#ffffff',
-            pointHoverBorderWidth: 2,
-            borderWidth: 2.5,
-            borderCapStyle: 'round' as const,
-            borderJoinStyle: 'round' as const,
-          },
-        ],
-      };
-    }
+    const returnData = data.map(item => ({
+      time: item.date as any,
+      value: item.annualizedReturnRate,
+    }));
+
+    return { costData, valueData, returnData };
+  }, [data]);
+
+  // 创建浮动工具提示
+  const createTooltip = useCallback(() => {
+    if (!chartContainerRef.current || tooltipRef.current) return;
+
+    const tooltip = document.createElement('div');
+    tooltip.className = 'lightweight-charts-tooltip';
+    Object.assign(tooltip.style, {
+      position: 'absolute',
+      display: 'none',
+      padding: '8px 12px',
+      fontSize: isMobile ? '11px' : '12px',
+      fontFamily: 'system-ui, -apple-system, sans-serif',
+      backgroundColor: 'rgba(10, 10, 10, 0.95)',
+      color: '#e0e0e0',
+      border: '1px solid #4a9eff',
+      borderRadius: '6px',
+      pointerEvents: 'none',
+      zIndex: '1000',
+      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+      backdropFilter: 'blur(4px)',
+      maxWidth: '200px',
+    });
+
+    chartContainerRef.current.appendChild(tooltip);
+    tooltipRef.current = tooltip;
+  }, [isMobile]);
+
+  // 初始化图表
+  useEffect(() => {
+    if (!chartContainerRef.current) return;
+
+    // 创建图表实例
+    const chart = createChart(chartContainerRef.current, {
+      width: chartContainerRef.current.clientWidth,
+      height: chartContainerRef.current.clientHeight,
+      layout: {
+        background: { color: 'transparent' },
+        textColor: '#e0e0e0',
+        fontSize: isMobile ? 10 : 12,
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+      },
+      grid: {
+        vertLines: {
+          color: 'rgba(51, 51, 51, 0.2)',
+          style: LineStyle.Solid,
+        },
+        horzLines: {
+          color: 'rgba(51, 51, 51, 0.2)',
+          style: LineStyle.Solid,
+        },
+      },
+      crosshair: {
+        mode: CrosshairMode.Normal,
+        vertLine: {
+          color: '#4a9eff',
+          labelBackgroundColor: '#4a9eff',
+          width: 1,
+        },
+        horzLine: {
+          color: '#4a9eff',
+          labelBackgroundColor: '#4a9eff',
+          width: 1,
+        },
+      },
+      rightPriceScale: {
+        visible: true,
+        borderColor: 'rgba(51, 51, 51, 0.3)',
+        scaleMargins: {
+          top: 0.1,
+          bottom: 0.1,
+        },
+        ticksVisible: true,
+      },
+      leftPriceScale: {
+        visible: false,
+      },
+      timeScale: {
+        borderColor: 'rgba(51, 51, 51, 0.3)',
+        timeVisible: false,
+        secondsVisible: false,
+        tickMarkFormatter: (time: any) => {
+          try {
+            const date = new Date(time);
+            if (isMobile) {
+              return `${date.getMonth() + 1}/${date.getDate()}`;
+            } else {
+              const now = new Date();
+              const diffTime = Math.abs(now.getTime() - date.getTime());
+              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+              if (diffDays < 30) {
+                return `${date.getMonth() + 1}/${date.getDate()}`;
+              } else if (diffDays < 365) {
+                return `${date.getMonth() + 1}月`;
+              } else {
+                return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+              }
+            }
+          } catch (error) {
+            return time;
+          }
+        },
+      },
+      handleScroll: {
+        vertTouchDrag: false,
+        mouseWheel: true,
+        pressedMouseMove: true,
+      },
+      handleScale: {
+        axisPressedMouseMove: {
+          time: true,
+          price: true,
+        },
+        mouseWheel: true,
+        pinch: true,
+      },
+    });
+
+    chartRef.current = chart;
+    setIsChartReady(true);
+    createTooltip();
+
+    // 清理函数
+    return () => {
+      if (tooltipRef.current && chartContainerRef.current) {
+        chartContainerRef.current.removeChild(tooltipRef.current);
+        tooltipRef.current = null;
+      }
+      chart.remove();
+      chartRef.current = null;
+      setIsChartReady(false);
+    };
+  }, [isMobile, createTooltip]);
+
+  // 设置工具提示事件
+  const setupTooltip = useCallback(() => {
+    if (!chartRef.current || !tooltipRef.current || !data || data.length === 0) return;
+
+    const chart = chartRef.current;
+    const tooltip = tooltipRef.current;
+
+    // 订阅十字线移动事件
+    chart.subscribeCrosshairMove((param) => {
+      if (!param || !param.point || !param.time) {
+        tooltip.style.display = 'none';
+        return;
+      }
+
+      // 获取数据点
+      const dataIndex = data.findIndex(item => item.date === param.time);
+      if (dataIndex === -1) {
+        tooltip.style.display = 'none';
+        return;
+      }
+
+      const item = data[dataIndex];
+      let tooltipContent = '';
+
+      if (chartView === 'cost') {
+        // 成本视图显示两条线的数据
+        const currentReturnRate = ((item.currentValue - item.totalInvestment) / item.totalInvestment) * 100;
+        tooltipContent = `
+          <div style="margin-bottom: 4px; color: #00CED1; font-weight: 600;">
+            累计投入: ¥${item.totalInvestment.toFixed(2)}
+          </div>
+          <div style="margin-bottom: 4px; color: #FFD700; font-weight: 600;">
+            当前价值: ¥${item.currentValue.toFixed(2)}
+          </div>
+          <div style="color: #4ECDC4; font-size: 11px;">
+            收益率: ${currentReturnRate.toFixed(2)}%
+          </div>
+        `;
+      } else {
+        // 收益率视图显示单条线数据
+        tooltipContent = `
+          <div style="margin-bottom: 4px; color: #4ECDC4; font-weight: 600;">
+            年化收益率: ${item.annualizedReturnRate.toFixed(2)}%
+          </div>
+        `;
+      }
+
+      tooltip.innerHTML = `
+        <div style="margin-bottom: 6px; color: #4a9eff; font-weight: 600; border-bottom: 1px solid #333; padding-bottom: 4px;">
+          ${item.date}
+        </div>
+        ${tooltipContent}
+      `;
+
+      // 计算工具提示位置
+      const containerRect = chartContainerRef.current!.getBoundingClientRect();
+      const chartWidth = containerRect.width;
+      const chartHeight = containerRect.height;
+
+      let left = param.point.x - 215; // 从左侧显示（因为Y轴在右边）
+      let top = param.point.y - 40;
+
+      // 防止工具提示超出图表边界
+      const tooltipRect = tooltip.getBoundingClientRect();
+      if (left < 0) {
+        left = param.point.x + 15; // 如果太靠左，就显示在右边
+      }
+      if (top < 0) {
+        top = param.point.y + 15;
+      }
+
+      tooltip.style.left = `${left}px`;
+      tooltip.style.top = `${top}px`;
+      tooltip.style.display = 'block';
+    });
   }, [data, chartView]);
 
-  // 图表配置选项
-  const options = React.useMemo(() => {
-    const isReturnView = chartView === 'return';
-
-    return {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: {
-        intersect: false,
-        mode: 'index' as const,
-      },
-      layout: {
-        padding: {
-          top: isMobile ? 5 : 10,
-          right: isMobile ? 5 : 25,
-          bottom: isMobile ? 30 : 50,
-          left: isMobile ? 5 : 40,
-        },
-      },
-      plugins: {
-        title: {
-          display: false,
-        },
-        legend: {
-          display: true,
-          position: isMobile ? 'top' as const : 'top' as const,
-          labels: {
-            color: '#e0e0e0',
-            font: {
-              size: isMobile ? 10 : 12,
-              weight: 500,
-            },
-            padding: isMobile ? 8 : 15,
-            usePointStyle: true,
-            pointStyle: 'circle' as const,
-            boxWidth: isMobile ? 6 : 8,
-            boxHeight: isMobile ? 6 : 8,
-          },
-          align: 'center' as const,
-        },
-        tooltip: {
-          backgroundColor: 'rgba(10, 10, 10, 0.95)',
-          titleColor: '#4a9eff',
-          bodyColor: '#e0e0e0',
-          borderColor: '#4a9eff',
-          borderWidth: 1,
-          cornerRadius: 8,
-          displayColors: true,
-          padding: 12,
-          titleFont: {
-            size: isMobile ? 12 : 14,
-            weight: 600,
-          },
-          bodyFont: {
-            size: isMobile ? 11 : 13,
-          },
-          boxPadding: 6,
-          usePointStyle: true,
-          callbacks: {
-            title: (items: any[]) => {
-              if (items.length > 0) {
-                const index = items[0].dataIndex;
-                const item = data[index];
-                return item.date;
-              }
-              return '';
-            },
-            label: (context: any) => {
-              const index = context.dataIndex;
-              const item = data[index];
-
-              if (isReturnView) {
-                return `年化收益率: ${item.annualizedReturnRate.toFixed(2)}%`;
-              } else {
-                if (context.datasetIndex === 0) {
-                  return `累计投入金额: ¥${item.totalInvestment.toFixed(2)}`;
-                } else {
-                  return `当前份额价值: ¥${item.currentValue.toFixed(2)}`;
-                }
-              }
-            },
-            afterLabel: (context: any) => {
-              const index = context.dataIndex;
-              const item = data[index];
-
-              if (!isReturnView) {
-                const currentReturnRate = ((item.currentValue - item.totalInvestment) / item.totalInvestment) * 100;
-                return `当前收益率: ${currentReturnRate.toFixed(2)}%`;
-              }
-              return '';
-            },
-          },
-        },
-        zoom: {
-          zoom: {
-            wheel: {
-              enabled: true,
-              modifierKey: 'ctrl' as const,
-            },
-            pinch: {
-              enabled: true,
-            },
-            drag: {
-              enabled: true,
-              backgroundColor: 'rgba(74, 158, 255, 0.1)',
-              borderColor: 'rgba(74, 158, 255, 0.3)',
-              borderWidth: 1,
-            },
-            mode: 'x' as const,
-          },
-          pan: {
-            enabled: true,
-            mode: 'x' as const,
-            modifierKey: 'shift' as const,
-          },
-          limits: {
-            x: {
-              min: 'original' as const,
-              max: 'original' as const,
-            },
-          },
-        },
-        annotation: isReturnView ? {
-          annotations: {
-            zeroLine: {
-              type: 'line' as const,
-              yMin: 0,
-              yMax: 0,
-              borderColor: '#888',
-              borderWidth: 1,
-              borderDash: [4, 4],
-              label: {
-                display: true,
-                content: '0% 基准线',
-                position: 'end' as const,
-                color: '#888',
-                font: {
-                  size: 10,
-                  weight: 500,
-                },
-                backgroundColor: 'transparent',
-                padding: 4,
-              },
-            },
-          },
-        } : {},
-      },
-      scales: {
-        x: {
-          type: 'category' as const,
-          grid: {
-            color: 'rgba(51, 51, 51, 0.2)',
-            drawBorder: false,
-            drawOnChartArea: true,
-            drawTicks: false,
-            tickLength: 0,
-          },
-          ticks: {
-            color: '#999',
-            font: {
-              size: isMobile ? 9 : 11,
-              weight: 'normal' as const,
-            },
-            maxRotation: 0,
-            minRotation: 0,
-            autoSkip: true,
-            autoSkipPadding: isMobile ? 20 : 40,
-            maxTicksLimit: isMobile ? 4 : 8,
-            padding: 5,
-            callback: function(this: any, value: any, index: number) {
-              const label = this.getLabelForValue(value);
-              if (!label) return '';
-
-              try {
-                const date = new Date(label);
-                if (isNaN(date.getTime())) {
-                  // 如果不是有效日期，按原格式处理
-                  if (isMobile) {
-                    const parts = label.split('-');
-                    if (parts.length >= 2) {
-                      return `${parts[1]}/${parts[2]}`; // MM/DD
-                    }
-                    return label;
-                  }
-                  return label;
-                }
-
-                // 格式化日期
-                if (isMobile) {
-                  return `${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getDate().toString().padStart(2, '0')}`;
-                } else {
-                  // 桌面端显示更完整的信息
-                  const now = new Date();
-                  const diffTime = Math.abs(now.getTime() - date.getTime());
-                  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-                  if (diffDays < 30) {
-                    return `${date.getMonth() + 1}/${date.getDate()}`;
-                  } else if (diffDays < 365) {
-                    return `${date.getMonth() + 1}月`;
-                  } else {
-                    return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
-                  }
-                }
-              } catch (error) {
-                return label;
-              }
-            },
-          },
-          title: {
-            display: true,
-            text: '时间',
-            color: '#999',
-            font: {
-              size: isMobile ? 10 : 12,
-              weight: 500,
-            },
-            padding: {
-              top: isMobile ? 10 : 15,
-              bottom: 5,
-            },
-          },
-        },
-        y: {
-          type: 'linear' as const,
-          position: 'left' as const,
-          grid: {
-            color: 'rgba(51, 51, 51, 0.2)',
-            drawBorder: false,
-            drawOnChartArea: true,
-            drawTicks: false,
-            tickLength: 0,
-          },
-          ticks: {
-            color: '#999',
-            font: {
-              size: isMobile ? 9 : 11,
-              weight: 'normal' as const,
-            },
-            padding: 5,
-            callback: function(this: any, value: any) {
-              if (isReturnView) {
-                return `${value.toFixed(1)}%`;
-              }
-              return `¥${value.toFixed(0)}`;
-            },
-          },
-          title: {
-            display: true,
-            text: isReturnView ? '年化收益率（%）' : '金额（元）',
-            color: '#999',
-            font: {
-              size: isMobile ? 10 : 12,
-              weight: 500,
-            },
-            padding: {
-              top: 5,
-              bottom: isMobile ? 10 : 15,
-            },
-          },
-        },
-      },
-    };
-  }, [chartView, isMobile, data]);
-
-  // 处理缩放变化
+  // 更新系列数据
   useEffect(() => {
-    if (onZoomChange && chartRef.current) {
-      const chart = chartRef.current;
-      const { min, max } = chart.scales.x;
+    if (!chartRef.current || !isChartReady) return;
 
-      if (min !== undefined && max !== undefined) {
-        const startIndex = Math.floor(min);
-        const endIndex = Math.ceil(max);
+    const chart = chartRef.current;
+    const { costData, valueData, returnData } = convertData();
 
-        if (startIndex !== brushStartIndex || endIndex !== brushEndIndex) {
+    // 清除现有系列
+    seriesRef.current.forEach(series => {
+      chart.removeSeries(series);
+    });
+    seriesRef.current = [];
+
+    if (chartView === 'cost') {
+      // 成本视图 - 使用两条普通线型图对比
+      const costSeries = chart.addSeries(LineSeries, {
+        color: '#00CED1',
+        lineWidth: 2,
+        title: '累计投入金额',
+        crosshairMarkerVisible: true,
+        crosshairMarkerRadius: 4,
+        crosshairMarkerBackgroundColor: '#00CED1',
+        crosshairMarkerBorderColor: '#ffffff',
+        crosshairMarkerBorderWidth: 2,
+      } as LineSeriesOptions);
+      costSeries.setData(costData);
+      seriesRef.current.push(costSeries);
+
+      const valueSeries = chart.addSeries(LineSeries, {
+        color: '#FFD700',
+        lineWidth: 2,
+        title: '当前份额价值',
+        crosshairMarkerVisible: true,
+        crosshairMarkerRadius: 4,
+        crosshairMarkerBackgroundColor: '#FFD700',
+        crosshairMarkerBorderColor: '#ffffff',
+        crosshairMarkerBorderWidth: 2,
+      } as LineSeriesOptions);
+      valueSeries.setData(valueData);
+      seriesRef.current.push(valueSeries);
+    } else {
+      // 收益率视图 - 使用BaselineSeries，以0为基线
+      const returnSeries = chart.addSeries(BaselineSeries, {
+        baseValue: { type: 'price', price: 0 },
+        topLineColor: '#4ECDC4',
+        topFillColor1: 'rgba(78, 205, 196, 0.3)',
+        topFillColor2: 'rgba(78, 205, 196, 0.05)',
+        bottomLineColor: '#FF6B6B',
+        bottomFillColor1: 'rgba(255, 107, 107, 0.3)',
+        bottomFillColor2: 'rgba(255, 107, 107, 0.05)',
+        lineWidth: 2,
+        title: '年化收益率',
+        crosshairMarkerVisible: true,
+        crosshairMarkerRadius: 4,
+        crosshairMarkerBackgroundColor: '#4ECDC4',
+        crosshairMarkerBorderColor: '#ffffff',
+        crosshairMarkerBorderWidth: 2,
+      } as any);
+      returnSeries.setData(returnData);
+      seriesRef.current.push(returnSeries);
+    }
+
+    // 设置工具提示
+    setupTooltip();
+
+    // 设置可见范围
+    if (brushStartIndex >= 0 && brushEndIndex > 0) {
+      const visibleData = data.slice(brushStartIndex, brushEndIndex + 1);
+      if (visibleData.length > 0) {
+        chart.timeScale().setVisibleRange({
+          from: visibleData[0].date as any,
+          to: visibleData[visibleData.length - 1].date as any,
+        });
+      }
+    }
+
+    // 订阅可见范围变化事件
+    const handleVisibleTimeRangeChange = () => {
+      if (!onZoomChange) return;
+
+      const visibleRange = chart.timeScale().getVisibleRange();
+      if (visibleRange) {
+        const startIndex = data.findIndex(item => item.date === visibleRange.from);
+        const endIndex = data.findIndex(item => item.date === visibleRange.to);
+
+        if (startIndex !== -1 && endIndex !== -1) {
           onZoomChange(Math.max(0, startIndex), Math.min(data.length - 1, endIndex));
         }
       }
-    }
-  }, [onZoomChange, brushStartIndex, brushEndIndex, data.length]);
+    };
 
-  // 应用缩放范围
+    chart.timeScale().subscribeVisibleTimeRangeChange(handleVisibleTimeRangeChange);
+
+    return () => {
+      chart.timeScale().unsubscribeVisibleTimeRangeChange(handleVisibleTimeRangeChange);
+    };
+  }, [chartView, isChartReady, convertData, data, onZoomChange, brushStartIndex, brushEndIndex, setupTooltip]);
+
+  // 处理窗口大小变化
   useEffect(() => {
-    if (chartRef.current && brushStartIndex >= 0 && brushEndIndex > 0) {
-      const chart = chartRef.current;
-      const min = brushStartIndex;
-      const max = brushEndIndex;
+    if (!chartRef.current || !chartContainerRef.current) return;
 
-      chart.zoomScale('x', {min, max});
-      chart.update('none');
-    }
-  }, [brushStartIndex, brushEndIndex]);
+    const handleResize = () => {
+      if (chartRef.current && chartContainerRef.current) {
+        chartRef.current.applyOptions({
+          width: chartContainerRef.current.clientWidth,
+          height: chartContainerRef.current.clientHeight,
+        });
+      }
+    };
+
+    const resizeObserver = new ResizeObserver(handleResize);
+    resizeObserver.observe(chartContainerRef.current);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, []);
 
   return (
     <div className="w-full h-full relative">
-      <Line
-        ref={chartRef}
-        data={chartData}
-        options={options}
+      <div
+        ref={chartContainerRef}
+        className="w-full h-full"
+        style={{ minHeight: '400px' }}
       />
+      {!isChartReady && (
+        <div className="absolute inset-0 flex items-center justify-center bg-[#151515] rounded-xl">
+          <div className="text-center text-[#666]">
+            <div className="text-lg mb-2">📊</div>
+            <div className="text-sm">正在加载图表...</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

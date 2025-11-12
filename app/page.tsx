@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { format, subYears } from 'date-fns';
 import dynamic from 'next/dynamic';
 
-// 动态导入Chart.js组件以避免SSR问题
+// 动态导入InvestmentChart组件以避免SSR问题
 const InvestmentChart = dynamic(() => import('./components/InvestmentChart'), {
   ssr: false,
   loading: () => <div className="w-full h-full flex items-center justify-center"><div className="text-center text-[#666]"><div className="text-lg mb-2">📊</div><div className="text-sm">正在加载图表...</div></div></div>
