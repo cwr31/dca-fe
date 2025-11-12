@@ -18,6 +18,7 @@ interface ChartDataPoint {
   totalInvestment: number;
   currentValue: number;
   annualizedReturnRate: number;
+  cumulativePrice?: number; // 累计净值，用于一次性投入计算（包含分红）
 }
 
 interface InvestmentChartProps {
@@ -45,7 +46,7 @@ export default function InvestmentChart({
 
   // 转换数据为 lightweight-charts 格式
   const convertData = useCallback(() => {
-    if (!data || data.length === 0) return { costData: [], valueData: [], returnData: [] };
+    if (!data || data.length === 0) return { costData: [], valueData: [], returnData: [], lumpSumData: [], lumpSumReturnData: [] };
 
     const costData = data.map(item => ({
       time: item.date as any,
@@ -62,7 +63,62 @@ export default function InvestmentChart({
       value: item.annualizedReturnRate,
     }));
 
-    return { costData, valueData, returnData };
+    // 计算一次性投入的年化收益率数据
+    const lumpSumReturnData = data.map((item, index) => {
+      if (index === 0) {
+        // 第一个时间点，一次性投入收益率为0
+        return {
+          time: item.date as any,
+          value: 0,
+        };
+      } else {
+        // 后续时间点，基于累计净值计算一次性投入的累计收益率
+        const initialCumulativePrice = data[0].cumulativePrice || data[0].currentValue;
+        const currentCumulativePrice = item.cumulativePrice || item.currentValue;
+        const totalReturnRate = initialCumulativePrice > 0 ?
+          ((currentCumulativePrice - initialCumulativePrice) / initialCumulativePrice) * 100 : 0;
+
+        // 转换为年化收益率（简化计算，基于总时间）
+        const totalDays = Math.floor((new Date(item.date).getTime() - new Date(data[0].date).getTime()) / (1000 * 60 * 60 * 24));
+        const years = totalDays > 0 ? totalDays / 365.25 : 0;
+        const annualizedReturn = years > 0 ? (Math.pow(1 + totalReturnRate / 100, 1 / years) - 1) * 100 : 0;
+
+        return {
+          time: item.date as any,
+          value: Number(annualizedReturn.toFixed(2)),
+        };
+      }
+    });
+
+    // 计算一次性投入的数据（基于累计净值，包含分红）
+    // 一次性投入的初始金额 = 定投总期数 × 单次定投金额
+    // 使用最后一个时间点的总投入金额作为参考（这是最准确的定投总本金）
+    const totalPeriods = data.length; // 定投期数
+    const lumpSumInitialInvestment = data[data.length - 1]?.totalInvestment || data[0]?.totalInvestment || 0;
+
+    const lumpSumData = data.map((item, index) => {
+      if (index === 0) {
+        // 第一个时间点，一次性投入总本金（等于定投的总投入金额）
+        return {
+          time: item.date as any,
+          value: lumpSumInitialInvestment,
+        };
+      } else {
+        // 后续时间点，基于累计净值变化计算一次性投入的价值
+        // 这样可以确保包含分红再投资的效果
+        const initialCumulativePrice = data[0].cumulativePrice || data[0].currentValue;
+        const currentCumulativePrice = item.cumulativePrice || item.currentValue;
+        const priceRatio = initialCumulativePrice > 0 ? (currentCumulativePrice / initialCumulativePrice) : 1;
+        const lumpSumValue = lumpSumInitialInvestment * priceRatio;
+
+        return {
+          time: item.date as any,
+          value: lumpSumValue,
+        };
+      }
+    });
+
+    return { costData, valueData, returnData, lumpSumData, lumpSumReturnData: lumpSumReturnData || [] };
   }, [data]);
 
   // 创建浮动工具提示
@@ -105,6 +161,7 @@ export default function InvestmentChart({
         textColor: '#e0e0e0',
         fontSize: isMobile ? 10 : 12,
         fontFamily: 'system-ui, -apple-system, sans-serif',
+        attributionLogo: false, // 去除TradingView水印
       },
       grid: {
         vertLines: {
@@ -224,8 +281,19 @@ export default function InvestmentChart({
       let tooltipContent = '';
 
       if (chartView === 'cost') {
-        // 成本视图显示两条线的数据
+        // 成本视图显示三条线的数据
         const currentReturnRate = ((item.currentValue - item.totalInvestment) / item.totalInvestment) * 100;
+
+        // 计算一次性投入的当前价值和收益率
+        // 使用最后一个时间点的总投入金额作为一次性投入的初始本金
+        const lumpSumInitial = data[data.length - 1]?.totalInvestment || data[0]?.totalInvestment || 0;
+        // 基于累计净值计算一次性投入的当前价值（包含分红）
+        const initialCumulativePrice = data[0].cumulativePrice || data[0].currentValue;
+        const currentCumulativePrice = item.cumulativePrice || item.currentValue;
+        const priceRatio = initialCumulativePrice > 0 ? (currentCumulativePrice / initialCumulativePrice) : 1;
+        const lumpSumCurrent = lumpSumInitial * priceRatio;
+        const lumpSumReturnRate = ((lumpSumCurrent - lumpSumInitial) / lumpSumInitial) * 100;
+
         tooltipContent = `
           <div style="margin-bottom: 4px; color: #00CED1; font-weight: 600;">
             累计投入: ¥${item.totalInvestment.toFixed(2)}
@@ -233,15 +301,36 @@ export default function InvestmentChart({
           <div style="margin-bottom: 4px; color: #FFD700; font-weight: 600;">
             当前价值: ¥${item.currentValue.toFixed(2)}
           </div>
+          <div style="margin-bottom: 4px; color: #FF6BFF; font-weight: 600;">
+            一次性投入: ¥${lumpSumCurrent.toFixed(2)}
+          </div>
           <div style="color: #4ECDC4; font-size: 11px;">
-            收益率: ${currentReturnRate.toFixed(2)}%
+            定投收益率: ${currentReturnRate.toFixed(2)}% | 一次性收益率: ${lumpSumReturnRate.toFixed(2)}%
           </div>
         `;
       } else {
-        // 收益率视图显示单条线数据
+        // 收益率视图显示两条年化收益率曲线对比
+        const currentReturnRate = item.annualizedReturnRate;
+
+        // 计算一次性投入的年化收益率
+        const lumpSumInitial = data[data.length - 1]?.totalInvestment || data[0]?.totalInvestment || 0;
+        const initialCumulativePrice = data[0].cumulativePrice || data[0].currentValue;
+        const currentCumulativePrice = item.cumulativePrice || item.currentValue;
+        const priceRatio = initialCumulativePrice > 0 ? (currentCumulativePrice / initialCumulativePrice) : 1;
+        const lumpSumCurrent = lumpSumInitial * priceRatio;
+
+        // 重新计算一次性投入的年化收益率（与convertData中的逻辑一致）
+        const totalDays = Math.floor((new Date(item.date).getTime() - new Date(data[0].date).getTime()) / (1000 * 60 * 60 * 24));
+        const years = totalDays > 0 ? totalDays / 365.25 : 0;
+        const totalReturnRate = ((lumpSumCurrent - lumpSumInitial) / lumpSumInitial) * 100;
+        const lumpSumAnnualizedReturn = years > 0 ? (Math.pow(1 + totalReturnRate / 100, 1 / years) - 1) * 100 : 0;
+
         tooltipContent = `
           <div style="margin-bottom: 4px; color: #4ECDC4; font-weight: 600;">
-            年化收益率: ${item.annualizedReturnRate.toFixed(2)}%
+            定投年化收益率: ${currentReturnRate.toFixed(2)}%
+          </div>
+          <div style="margin-bottom: 4px; color: #FF6BFF; font-weight: 600;">
+            一次性投入年化收益率: ${lumpSumAnnualizedReturn.toFixed(2)}%
           </div>
         `;
       }
@@ -281,7 +370,7 @@ export default function InvestmentChart({
     if (!chartRef.current || !isChartReady) return;
 
     const chart = chartRef.current;
-    const { costData, valueData, returnData } = convertData();
+    const { costData, valueData, returnData, lumpSumData, lumpSumReturnData } = convertData();
 
     // 清除现有系列
     seriesRef.current.forEach(series => {
@@ -290,16 +379,17 @@ export default function InvestmentChart({
     seriesRef.current = [];
 
     if (chartView === 'cost') {
-      // 成本视图 - 使用两条普通线型图对比
+      // 成本视图 - 添加三条曲线对比
       const costSeries = chart.addSeries(LineSeries, {
         color: '#00CED1',
         lineWidth: 2,
-        title: '累计投入金额',
         crosshairMarkerVisible: true,
         crosshairMarkerRadius: 4,
         crosshairMarkerBackgroundColor: '#00CED1',
         crosshairMarkerBorderColor: '#ffffff',
         crosshairMarkerBorderWidth: 2,
+        
+        priceLineVisible: false, // 完全移除priceLine（最终点的水平线）
       } as LineSeriesOptions);
       costSeries.setData(costData);
       seriesRef.current.push(costSeries);
@@ -307,17 +397,33 @@ export default function InvestmentChart({
       const valueSeries = chart.addSeries(LineSeries, {
         color: '#FFD700',
         lineWidth: 2,
-        title: '当前份额价值',
         crosshairMarkerVisible: true,
         crosshairMarkerRadius: 4,
         crosshairMarkerBackgroundColor: '#FFD700',
         crosshairMarkerBorderColor: '#ffffff',
         crosshairMarkerBorderWidth: 2,
+        
+        priceLineVisible: false, // 完全移除priceLine（最终点的水平线）
       } as LineSeriesOptions);
       valueSeries.setData(valueData);
       seriesRef.current.push(valueSeries);
+
+      // 添加一次性投入曲线
+      const lumpSumSeries = chart.addSeries(LineSeries, {
+        color: '#FF6BFF', // 紫色，便于区分
+        lineWidth: 2,
+        crosshairMarkerVisible: true,
+        crosshairMarkerRadius: 4,
+        crosshairMarkerBackgroundColor: '#FF6BFF',
+        crosshairMarkerBorderColor: '#ffffff',
+        crosshairMarkerBorderWidth: 2,
+        
+        priceLineVisible: false, // 完全移除priceLine（最终点的水平线）
+      } as LineSeriesOptions);
+      lumpSumSeries.setData(lumpSumData);
+      seriesRef.current.push(lumpSumSeries);
     } else {
-      // 收益率视图 - 使用BaselineSeries，以0为基线
+      // 收益率视图 - 添加定投和一次性投入的收益率曲线对比
       const returnSeries = chart.addSeries(BaselineSeries, {
         baseValue: { type: 'price', price: 0 },
         topLineColor: '#4ECDC4',
@@ -327,15 +433,31 @@ export default function InvestmentChart({
         bottomFillColor1: 'rgba(255, 107, 107, 0.3)',
         bottomFillColor2: 'rgba(255, 107, 107, 0.05)',
         lineWidth: 2,
-        title: '年化收益率',
         crosshairMarkerVisible: true,
         crosshairMarkerRadius: 4,
         crosshairMarkerBackgroundColor: '#4ECDC4',
         crosshairMarkerBorderColor: '#ffffff',
         crosshairMarkerBorderWidth: 2,
+        
+        priceLineVisible: false, // 完全移除priceLine（最终点的水平线）
       } as any);
       returnSeries.setData(returnData);
       seriesRef.current.push(returnSeries);
+
+      // 添加一次性投入年化收益率曲线
+      const lumpSumReturnSeries = chart.addSeries(LineSeries, {
+        color: '#FF6BFF', // 紫色，便于区分
+        lineWidth: 2,
+        crosshairMarkerVisible: true,
+        crosshairMarkerRadius: 4,
+        crosshairMarkerBackgroundColor: '#FF6BFF',
+        crosshairMarkerBorderColor: '#ffffff',
+        crosshairMarkerBorderWidth: 2,
+        
+        priceLineVisible: false, // 完全移除priceLine（最终点的水平线）
+      } as LineSeriesOptions);
+      lumpSumReturnSeries.setData(lumpSumReturnData);
+      seriesRef.current.push(lumpSumReturnSeries);
     }
 
     // 设置工具提示
