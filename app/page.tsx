@@ -618,61 +618,49 @@ export default function Home() {
 
               {/* 回测统计 */}
               {stats && (
-                <div className="mb-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                  <div className="flex items-center gap-2 mb-3">
+                <div className="mb-3 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                  <div className="flex items-center gap-2 mb-2">
                     <div className="w-1 h-5 bg-gradient-to-b from-[#4a9eff] to-[#0066cc] rounded-full"></div>
-                    <h3 className="text-white text-base font-bold">回测统计</h3>
+                    <h3 className="text-white text-sm md:text-base font-bold tracking-wide">回测统计</h3>
                   </div>
-                  <div className="space-y-3">
-                    {/* 定投统计 */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] p-4 rounded-xl border border-[#2a2a2a]">
-                        <div className="text-[#888] text-sm font-medium mb-1">定投总期数</div>
-                        <div className="text-white text-xl font-bold">{investmentRecords.length}期</div>
-                      </div>
-                      <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] p-4 rounded-xl border border-[#2a2a2a]">
-                        <div className="text-[#888] text-sm font-medium mb-1">投入总本金（元）</div>
-                        <div className="text-white text-xl font-bold">¥{Number(stats.totalInvestment.toFixed(2)).toLocaleString('zh-CN')}</div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2 md:gap-3">
+                    <div className="bg-[#1c1c1c]/90 p-2.5 rounded-lg border border-[#2a2a2a]">
+                      <div className="text-[#888] text-[11px] md:text-xs font-medium mb-0.5">定投总期数</div>
+                      <div className="text-white text-sm md:text-base font-semibold leading-tight">{investmentRecords.length}期</div>
+                    </div>
+                    <div className="bg-[#1c1c1c]/90 p-2.5 rounded-lg border border-[#2a2a2a]">
+                      <div className="text-[#888] text-[11px] md:text-xs font-medium mb-0.5">投入总本金（元）</div>
+                      <div className="text-white text-sm md:text-base font-semibold leading-tight">¥{Number(stats.totalInvestment.toFixed(2)).toLocaleString('zh-CN')}</div>
+                    </div>
+                    <div className="bg-[#1c1c1c]/90 p-2.5 rounded-lg border border-[#2a2a2a]">
+                      <div className="text-[#888] text-[11px] md:text-xs font-medium mb-0.5">定投期末总资产（元）</div>
+                      <div className="text-white text-sm md:text-base font-semibold leading-tight">¥{Number(stats.currentValue.toFixed(2)).toLocaleString('zh-CN')}</div>
+                    </div>
+                    <div className="bg-[#1c1c1c]/90 p-2.5 rounded-lg border border-[#2a2a2a]">
+                      <div className="text-[#888] text-[11px] md:text-xs font-medium mb-0.5">定投收益率</div>
+                      <div className={`text-sm md:text-base font-semibold leading-tight ${stats.profitRate >= 0 ? 'text-[#ff4d4f]' : 'text-[#52c41a]'}`}>
+                        {stats.profitRate >= 0 ? '+' : ''}{stats.profitRate.toFixed(2)}%
                       </div>
                     </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] p-4 rounded-xl border border-[#2a2a2a]">
-                        <div className="text-[#888] text-sm font-medium mb-1">定投期末总资产（元）</div>
-                        <div className="text-white text-xl font-bold">¥{Number(stats.currentValue.toFixed(2)).toLocaleString('zh-CN')}</div>
-                      </div>
-                      <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] p-4 rounded-xl border border-[#2a2a2a]">
-                        <div className="text-[#888] text-sm font-medium mb-1">定投收益率</div>
-                        <div className={`text-xl font-bold ${stats.profitRate >= 0 ? 'text-[#ff4d4f]' : 'text-[#52c41a]'}`}>
-                          {stats.profitRate >= 0 ? '+' : ''}{stats.profitRate.toFixed(2)}%
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] p-4 rounded-xl border border-[#2a2a2a]">
-                      <div className="text-[#888] text-sm font-medium mb-1">定投年化收益率</div>
-                      <div className={`text-xl font-bold ${stats.profitRate >= 0 ? 'text-[#ff4d4f]' : 'text-[#52c41a]'}`}>
+                    <div className="bg-[#1c1c1c]/90 p-2.5 rounded-lg border border-[#2a2a2a]">
+                      <div className="text-[#888] text-[11px] md:text-xs font-medium mb-0.5">定投年化收益率</div>
+                      <div className={`text-sm md:text-base font-semibold leading-tight ${stats.profitRate >= 0 ? 'text-[#ff4d4f]' : 'text-[#52c41a]'}`}>
                         {stats.profitRate >= 0 ? '+' : ''}{stats.annualizedReturnRate?.toFixed(2) || '0.00'}%
                       </div>
                     </div>
-
-                    {/* 一次性投入统计 */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] p-4 rounded-xl border border-[#2a2a2a]">
-                        <div className="text-[#888] text-sm font-medium mb-1">一次性投入期末总资产（元）</div>
-                        <div className="text-white text-xl font-bold">¥{Number((stats.totalInvestment * (1 + stats.priceChangePercent / 100)).toFixed(2)).toLocaleString('zh-CN')}</div>
-                      </div>
-                      <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] p-4 rounded-xl border border-[#2a3a3a]">
-                        <div className="text-[#888] text-sm font-medium mb-1">一次性投入收益率</div>
-                        <div className={`text-xl font-bold ${stats.priceChangePercent >= 0 ? 'text-[#ff4d4f]' : 'text-[#52c41a]'}`}>
-                          {stats.priceChangePercent >= 0 ? '+' : ''}{stats.priceChangePercent.toFixed(2)}%
-                        </div>
+                    <div className="bg-[#1c1c1c]/90 p-2.5 rounded-lg border border-[#2a2a2a]">
+                      <div className="text-[#888] text-[11px] md:text-xs font-medium mb-0.5">一次性投入期末总资产（元）</div>
+                      <div className="text-white text-sm md:text-base font-semibold leading-tight">¥{Number((stats.totalInvestment * (1 + stats.priceChangePercent / 100)).toFixed(2)).toLocaleString('zh-CN')}</div>
+                    </div>
+                    <div className="bg-[#1c1c1c]/90 p-2.5 rounded-lg border border-[#2a2a2a]">
+                      <div className="text-[#888] text-[11px] md:text-xs font-medium mb-0.5">一次性投入收益率</div>
+                      <div className={`text-sm md:text-base font-semibold leading-tight ${stats.priceChangePercent >= 0 ? 'text-[#ff4d4f]' : 'text-[#52c41a]'}`}>
+                        {stats.priceChangePercent >= 0 ? '+' : ''}{stats.priceChangePercent.toFixed(2)}%
                       </div>
                     </div>
-
-                    <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] p-4 rounded-xl border border-[#2a2a2a]">
-                      <div className="text-[#888] text-sm font-medium mb-1">一次性投入年化收益率</div>
-                      <div className={`text-xl font-bold ${stats.priceChangePercent >= 0 ? 'text-[#ff4d4f]' : 'text-[#52c41a]'}`}>
+                    <div className="bg-[#1c1c1c]/90 p-2.5 rounded-lg border border-[#2a2a2a]">
+                      <div className="text-[#888] text-[11px] md:text-xs font-medium mb-0.5">一次性投入年化收益率</div>
+                      <div className={`text-sm md:text-base font-semibold leading-tight ${stats.priceChangePercent >= 0 ? 'text-[#ff4d4f]' : 'text-[#52c41a]'}`}>
                         {(() => {
                           const daysDiff = stats.startDate && chartData.length > 0
                             ? Math.ceil((new Date(chartData[chartData.length - 1].date).getTime() - new Date(stats.startDate).getTime()) / (1000 * 60 * 60 * 24))
@@ -730,77 +718,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* 回测统计 */}
-              {stats && (
-                <div className="mb-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="w-1 h-5 bg-gradient-to-b from-[#4a9eff] to-[#0066cc] rounded-full"></div>
-                    <h3 className="text-white text-base font-bold">回测统计</h3>
-                  </div>
-                  <div className="space-y-3">
-                    {/* 定投统计 */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] p-4 rounded-xl border border-[#2a2a2a]">
-                        <div className="text-[#888] text-sm font-medium mb-1">定投总期数</div>
-                        <div className="text-white text-xl font-bold">{investmentRecords.length}期</div>
-                      </div>
-                      <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] p-4 rounded-xl border border-[#2a2a2a]">
-                        <div className="text-[#888] text-sm font-medium mb-1">投入总本金（元）</div>
-                        <div className="text-white text-xl font-bold">¥{Number(stats.totalInvestment.toFixed(2)).toLocaleString('zh-CN')}</div>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] p-4 rounded-xl border border-[#2a2a2a]">
-                        <div className="text-[#888] text-sm font-medium mb-1">定投期末总资产（元）</div>
-                        <div className="text-white text-xl font-bold">¥{Number(stats.currentValue.toFixed(2)).toLocaleString('zh-CN')}</div>
-                      </div>
-                      <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] p-4 rounded-xl border border-[#2a2a2a]">
-                        <div className="text-[#888] text-sm font-medium mb-1">定投收益率</div>
-                        <div className={`text-xl font-bold ${stats.profitRate >= 0 ? 'text-[#ff4d4f]' : 'text-[#52c41a]'}`}>
-                          {stats.profitRate >= 0 ? '+' : ''}{stats.profitRate.toFixed(2)}%
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] p-4 rounded-xl border border-[#2a2a2a]">
-                      <div className="text-[#888] text-sm font-medium mb-1">定投年化收益率</div>
-                      <div className={`text-xl font-bold ${stats.profitRate >= 0 ? 'text-[#ff4d4f]' : 'text-[#52c41a]'}`}>
-                        {stats.profitRate >= 0 ? '+' : ''}{stats.annualizedReturnRate?.toFixed(2) || '0.00'}%
-                      </div>
-                    </div>
-
-                    {/* 一次性投入统计 */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] p-4 rounded-xl border border-[#2a2a2a]">
-                        <div className="text-[#888] text-sm font-medium mb-1">一次性投入期末总资产（元）</div>
-                        <div className="text-white text-xl font-bold">¥{Number((stats.totalInvestment * (1 + stats.priceChangePercent / 100)).toFixed(2)).toLocaleString('zh-CN')}</div>
-                      </div>
-                      <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] p-4 rounded-xl border border-[#2a3a3a]">
-                        <div className="text-[#888] text-sm font-medium mb-1">一次性投入收益率</div>
-                        <div className={`text-xl font-bold ${stats.priceChangePercent >= 0 ? 'text-[#ff4d4f]' : 'text-[#52c41a]'}`}>
-                          {stats.priceChangePercent >= 0 ? '+' : ''}{stats.priceChangePercent.toFixed(2)}%
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="bg-gradient-to-br from-[#252525] to-[#1f1f1f] p-4 rounded-xl border border-[#2a2a2a]">
-                      <div className="text-[#888] text-sm font-medium mb-1">一次性投入年化收益率</div>
-                      <div className={`text-xl font-bold ${stats.priceChangePercent >= 0 ? 'text-[#ff4d4f]' : 'text-[#52c41a]'}`}>
-                        {(() => {
-                          const daysDiff = stats.startDate && chartData.length > 0
-                            ? Math.ceil((new Date(chartData[chartData.length - 1].date).getTime() - new Date(stats.startDate).getTime()) / (1000 * 60 * 60 * 24))
-                            : 365;
-                          const annualizedReturn = daysDiff > 0
-                            ? ((Math.pow(1 + stats.priceChangePercent / 100, 365 / daysDiff) - 1) * 100)
-                            : 0;
-                          return (stats.priceChangePercent >= 0 ? '+' : '') + annualizedReturn.toFixed(2);
-                        })()}%
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
 
               {/* 定投记录表格 */}
               {investmentRecords.length > 0 && (

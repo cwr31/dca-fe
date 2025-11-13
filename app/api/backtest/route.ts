@@ -254,6 +254,7 @@ export async function POST(request: NextRequest) {
         currentValue: finalTotalAssets, // 期末总资产
         profit,
         profitRate,
+        annualizedReturnRate: lastResult.annualizedReturnRate ?? null,
         averageCost: lastResult.averageCost,
         currentPrice: lastResult.price, // 使用单位净值作为当前价格
       },
