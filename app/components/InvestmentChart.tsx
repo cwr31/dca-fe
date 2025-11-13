@@ -226,7 +226,7 @@ export default function InvestmentChart({
         },
       },
       handleScroll: {
-        vertTouchDrag: false,
+        vertTouchDrag: true, // 启用移动端垂直滚动
         mouseWheel: true,
         pressedMouseMove: true,
       },
@@ -517,12 +517,62 @@ export default function InvestmentChart({
     };
   }, []);
 
+  // 移动端滚动处理 - 防止图表拦截页面滚动
+  useEffect(() => {
+    if (!isMobile || !chartContainerRef.current) return;
+
+    const container = chartContainerRef.current;
+    let startY = 0;
+    let isScrolling = false;
+
+    const handleTouchStart = (e: TouchEvent) => {
+      startY = e.touches[0].clientY;
+      isScrolling = false;
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      const currentY = e.touches[0].clientY;
+      const deltaY = startY - currentY;
+
+      // 如果垂直移动距离大于水平移动距离，认为是滚动操作
+      if (Math.abs(deltaY) > 10 && !isScrolling) {
+        isScrolling = true;
+        // 允许页面滚动，不阻止默认行为
+        return;
+      }
+
+      // 如果是图表内部的水平滑动（缩放/平移），则阻止默认行为
+      if (!isScrolling && Math.abs(deltaY) < 10) {
+        e.preventDefault();
+      }
+    };
+
+    const handleTouchEnd = () => {
+      isScrolling = false;
+    };
+
+    container.addEventListener('touchstart', handleTouchStart, { passive: true });
+    container.addEventListener('touchmove', handleTouchMove, { passive: false });
+    container.addEventListener('touchend', handleTouchEnd, { passive: true });
+
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [isMobile]);
+
   return (
     <div className="w-full h-full relative">
       <div
         ref={chartContainerRef}
         className="w-full h-full"
-        style={{ minHeight: '400px' }}
+        style={{
+          minHeight: isMobile ? '300px' : '400px',
+          maxHeight: isMobile ? '50vh' : 'none', // 移动端限制最大高度
+          touchAction: 'pan-y', // 允许垂直滚动
+          WebkitOverflowScrolling: 'touch' // iOS平滑滚动
+        }}
       />
       {!isChartReady && (
         <div className="absolute inset-0 flex items-center justify-center bg-[#151515] rounded-xl">

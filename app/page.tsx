@@ -688,7 +688,13 @@ export default function Home() {
                 </div>
               )}
               <div
-                className="flex-1 bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl p-2 md:p-4 border border-[#2a2a2a] shadow-2xl mb-2" style={{ minHeight: '400px' }}
+                className="flex-1 bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl p-2 md:p-4 border border-[#2a2a2a] shadow-2xl mb-2"
+                style={{
+                  minHeight: isMobile ? '300px' : '400px',
+                  maxHeight: isMobile ? '60vh' : 'none', // 移动端限制最大高度
+                  overflow: 'hidden', // 防止内容溢出
+                  position: 'relative'
+                }}
               >
                 <InvestmentChart
                   data={chartData}
