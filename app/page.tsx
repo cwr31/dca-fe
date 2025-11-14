@@ -86,6 +86,26 @@ export default function Home() {
   const [brushEndIndex, setBrushEndIndex] = useState<number>(0);
   const [isMobile, setIsMobile] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false); // 移动端侧边栏开关
+  const [recordsPage, setRecordsPage] = useState(1);
+  const recordsPerPage = 10;
+
+  useEffect(() => {
+    setRecordsPage(1);
+  }, [investmentRecords.length]);
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(Math.max(investmentRecords.length, 1) / recordsPerPage));
+    if (recordsPage > totalPages) {
+      setRecordsPage(totalPages);
+    }
+  }, [investmentRecords.length, recordsPage, recordsPerPage]);
+
+  const paginatedRecords = useMemo(() => {
+    const start = (recordsPage - 1) * recordsPerPage;
+    return investmentRecords.slice(start, start + recordsPerPage);
+  }, [investmentRecords, recordsPage, recordsPerPage]);
+
+  const totalRecordPages = Math.max(1, Math.ceil(Math.max(investmentRecords.length, 1) / recordsPerPage));
 
   // 检测移动端（使用防抖优化性能）
   useEffect(() => {
@@ -160,6 +180,7 @@ export default function Home() {
       setChartData([]);
       setStats(null);
       setInvestmentRecords([]);
+      setRecordsPage(1);
 
     try {
       // 获取基金数据（开始日期已确保必填）
@@ -321,8 +342,8 @@ export default function Home() {
 
 
   return (
-    <div className="w-full h-screen overflow-hidden bg-gradient-to-br from-[#0a0a0a] via-[#0f0f0f] to-[#0a0a0a]">
-      <div className="flex h-screen w-full relative">
+    <div className="w-full min-h-screen bg-gradient-to-br from-[#0a0a0a] via-[#0f0f0f] to-[#0a0a0a]">
+      <div className="flex min-h-screen w-full relative">
         {/* 移动端菜单按钮 */}
         {isMobile && (
           <button
@@ -609,22 +630,9 @@ export default function Home() {
         </div>
 
         {/* 右侧图表展示区域 */}
-        <div className="flex-1 bg-gradient-to-br from-[#0f0f0f] via-[#0a0a0a] to-[#0f0f0f] flex flex-col relative overflow-hidden">
+        <div className="flex-1 bg-gradient-to-br from-[#0f0f0f] via-[#0a0a0a] to-[#0f0f0f] flex flex-col relative">
           {chartData.length > 0 ? (
-            <div className="w-full h-full flex flex-col p-2 md:p-3 animate-in fade-in duration-500 overflow-hidden">
-              <div className="mb-2 pb-2 border-b border-[#2a2a2a] flex-shrink-0 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                <h2 className="text-white text-base md:text-[18px] font-bold m-0 bg-gradient-to-r from-white to-[#b0b0b0] bg-clip-text text-transparent">
-                  {chartView === 'cost' ? '定投成本 vs 价格趋势' : '年化收益率趋势'}
-                </h2>
-                <button
-                  onClick={() => setChartView(chartView === 'cost' ? 'return' : 'cost')}
-                  className="px-3 py-2 md:py-1.5 text-xs font-medium rounded-lg bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#2a2a2a] hover:border-[#4a9eff] hover:text-[#4a9eff] active:scale-95 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#4a9eff]/50 touch-manipulation w-full sm:w-auto"
-                  aria-label="切换视图"
-                >
-                  {chartView === 'cost' ? '📈 切换到年化收益率' : '💰 切换到成本收益'}
-                </button>
-              </div>
-
+            <div className="w-full flex flex-col p-2 md:p-5 gap-4 md:gap-6 animate-in fade-in duration-500">
               {/* 回测统计 - 新布局：4组对比卡片 */}
               {stats ? (
                 <StatsCards stats={(() => {
@@ -653,7 +661,7 @@ export default function Home() {
                 // 如果chartData有数据但stats还在加载，显示骨架屏
                 <StatsSkeleton count={4} />
               ) : null}
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-4 md:gap-5">
                 {/* 图表区域 - 无遮挡，全区域显示 */}
                 <div
                   className="bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl p-0 border border-[#2a2a2a] shadow-2xl"
@@ -664,6 +672,18 @@ export default function Home() {
                     position: 'relative'
                   }}
                 >
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-[#2a2a2a]">
+                    <h3 className="text-white text-base md:text-lg font-semibold">
+                      {chartView === 'cost' ? '收益表' : '收益率表'}
+                    </h3>
+                    <button
+                      onClick={() => setChartView(chartView === 'cost' ? 'return' : 'cost')}
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#2a2a2a] hover:border-[#4a9eff] hover:text-[#4a9eff] active:scale-95 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#4a9eff]/50 touch-manipulation"
+                      aria-label="切换视图"
+                    >
+                      {chartView === 'cost' ? '切换到收益率表' : '切换到收益表'}
+                    </button>
+                  </div>
                   <InvestmentChart
                     data={chartData}
                     chartView={chartView}
@@ -745,7 +765,7 @@ export default function Home() {
 
               {/* 定投记录表格 */}
               {investmentRecords.length > 0 && (
-                <div className="bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl border border-[#2a2a2a] shadow-2xl overflow-hidden flex flex-col flex-shrink-0 h-[200px] md:h-[200px]">
+                <div className="bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl border border-[#2a2a2a] shadow-2xl overflow-hidden flex flex-col">
                   <div className="px-3 md:px-4 py-2 border-b border-[#2a2a2a] flex-shrink-0 flex items-center justify-between">
                     <h3 className="text-white text-sm font-bold flex items-center gap-2">
                       <span className="text-base">📋</span>
@@ -762,7 +782,7 @@ export default function Home() {
                       </button>
                     )}
                   </div>
-                  <div className="overflow-x-auto overflow-y-auto flex-1 scroll-smooth" style={{ WebkitOverflowScrolling: 'touch' }}>
+                  <div className="overflow-x-auto scroll-smooth" style={{ WebkitOverflowScrolling: 'touch' }}>
                     <table className="w-full min-w-[600px] md:min-w-full">
                       <thead className="sticky top-0 z-10 bg-[#1a1a1a] bg-gradient-to-b from-[#1f1f1f] to-[#1a1a1a]">
                         <tr className="border-b border-[#2a2a2a]">
@@ -774,12 +794,12 @@ export default function Home() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[#2a2a2a]">
-                        {investmentRecords.map((record: any, index: number) => {
+                        {paginatedRecords.map((record: any, index: number) => {
                           const date = new Date(record.date);
                           const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
                           const weekday = weekdays[date.getDay()];
                           return (
-                            <tr key={index} className="hover:bg-[#1f1f1f] active:bg-[#252525] transition-colors">
+                            <tr key={`${record.date}-${index}`} className="hover:bg-[#1f1f1f] active:bg-[#252525] transition-colors">
                               <td className="px-3 md:px-4 py-2.5 md:py-2 whitespace-nowrap text-xs text-[#e0e0e0]">
                                 <span className="hidden sm:inline">{format(date, 'yyyy-MM-dd')} </span>
                                 <span className="sm:hidden">{format(date, 'MM/dd')}</span>
@@ -808,6 +828,35 @@ export default function Home() {
                         })}
                       </tbody>
                     </table>
+                  </div>
+                  <div className="px-3 md:px-4 py-2 border-t border-[#2a2a2a] flex flex-col md:flex-row items-start md:items-center justify-between gap-2">
+                    <span className="text-xs text-[#888]">
+                      第 {recordsPage} / {totalRecordPages} 页 · 共 {investmentRecords.length} 条记录
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setRecordsPage(prev => Math.max(1, prev - 1))}
+                        disabled={recordsPage === 1}
+                        className={`px-2.5 py-1.5 text-xs rounded-lg border ${
+                          recordsPage === 1
+                            ? 'bg-[#1f1f1f] border-[#2a2a2a] text-[#444] cursor-not-allowed'
+                            : 'bg-[#252525] border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#4a9eff] hover:text-white hover:border-[#4a9eff]'
+                        } transition-all duration-200`}
+                      >
+                        上一页
+                      </button>
+                      <button
+                        onClick={() => setRecordsPage(prev => Math.min(totalRecordPages, prev + 1))}
+                        disabled={recordsPage === totalRecordPages}
+                        className={`px-2.5 py-1.5 text-xs rounded-lg border ${
+                          recordsPage === totalRecordPages
+                            ? 'bg-[#1f1f1f] border-[#2a2a2a] text-[#444] cursor-not-allowed'
+                            : 'bg-[#252525] border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#4a9eff] hover:text-white hover:border-[#4a9eff]'
+                        } transition-all duration-200`}
+                      >
+                        下一页
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}

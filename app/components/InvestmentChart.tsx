@@ -47,6 +47,7 @@ export default function InvestmentChart({
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<any[]>([]);
   const tooltipRef = useRef<HTMLDivElement | null>(null);
+  const selectionStateRef = useRef({ active: false, startX: 0, currentX: 0 });
   const [isChartReady, setIsChartReady] = useState(false);
   const [internalSeriesVisibility, setInternalSeriesVisibility] = useState({
     cost: true,
@@ -55,8 +56,15 @@ export default function InvestmentChart({
     return: true,
     lumpSumReturn: true,
   });
+  const [selectionOverlay, setSelectionOverlay] = useState({
+    visible: false,
+    left: 0,
+    width: 0,
+  });
 
   const seriesVisibility = externalSeriesVisibility ?? internalSeriesVisibility;
+  const chartMinHeight = isMobile ? '300px' : '420px';
+  const chartMaxHeight = isMobile ? '50vh' : '420px';
 
   // 系列配置
   const seriesConfig = {
@@ -78,6 +86,65 @@ export default function InvestmentChart({
       }));
     }
   };
+
+  const applySelectionRange = useCallback((startCoord: number, endCoord: number) => {
+    if (!chartRef.current || !data || data.length === 0) return;
+
+    const minX = Math.min(startCoord, endCoord);
+    const maxX = Math.max(startCoord, endCoord);
+
+    if (Math.abs(maxX - minX) < 10) return;
+
+    const chart = chartRef.current;
+    const timeScale = chart.timeScale();
+    const fromTime = timeScale.coordinateToTime(minX);
+    const toTime = timeScale.coordinateToTime(maxX);
+
+    if (!fromTime || !toTime) return;
+
+    const convertToDate = (time: any) => {
+      if (!time) return null;
+      if (time instanceof Date) return time;
+      if (typeof time === 'string') return new Date(time);
+      if (typeof time === 'number') {
+        return new Date(time * 1000);
+      }
+      if (typeof time === 'object' && 'year' in time && 'month' in time && 'day' in time) {
+        return new Date(time.year as number, (time.month as number) - 1, time.day as number);
+      }
+      return null;
+    };
+
+    const startDate = convertToDate(fromTime);
+    const endDate = convertToDate(toTime);
+
+    if (!startDate || !endDate || endDate <= startDate) return;
+
+    const startIndex = data.findIndex(item => new Date(item.date) >= startDate);
+    if (startIndex === -1) return;
+
+    let endIndex = data.length - 1;
+    for (let i = data.length - 1; i >= startIndex; i--) {
+      if (new Date(data[i].date) <= endDate) {
+        endIndex = i;
+        break;
+      }
+    }
+
+    if (endIndex <= startIndex) return;
+
+    try {
+      chart.timeScale().setVisibleRange({
+        from: data[startIndex].date as any,
+        to: data[endIndex].date as any,
+      });
+      if (onZoomChange) {
+        onZoomChange(startIndex, endIndex);
+      }
+    } catch (error) {
+      console.warn('应用选择范围失败:', error);
+    }
+  }, [data, onZoomChange]);
 
   // 处理缩放操作
   const handleZoom = useCallback((action: 'in' | 'out' | 'reset') => {
@@ -310,19 +377,8 @@ export default function InvestmentChart({
           }
         },
       },
-      handleScroll: {
-        vertTouchDrag: true, // 启用移动端垂直滚动
-        mouseWheel: true,
-        pressedMouseMove: true,
-      },
-      handleScale: {
-        axisPressedMouseMove: {
-          time: true,
-          price: true,
-        },
-        mouseWheel: true,
-        pinch: true,
-      },
+      handleScroll: false,
+      handleScale: false,
     });
 
     chartRef.current = chart;
@@ -618,6 +674,119 @@ export default function InvestmentChart({
     };
   }, []);
 
+  useEffect(() => {
+    const container = chartContainerRef.current;
+    if (!container) return;
+
+    const getRelativeX = (clientX: number) => {
+      const rect = container.getBoundingClientRect();
+      const relativeX = clientX - rect.left;
+      return Math.min(Math.max(relativeX, 0), rect.width);
+    };
+
+    const updateOverlay = () => {
+      const { active, startX, currentX } = selectionStateRef.current;
+      if (!active) {
+        setSelectionOverlay(prev => (prev.visible ? { visible: false, left: 0, width: 0 } : prev));
+        return;
+      }
+
+      setSelectionOverlay({
+        visible: true,
+        left: Math.min(startX, currentX),
+        width: Math.abs(currentX - startX),
+      });
+    };
+
+    const startSelection = (clientX: number) => {
+      if (!chartRef.current) return;
+      const coord = getRelativeX(clientX);
+      selectionStateRef.current = {
+        active: true,
+        startX: coord,
+        currentX: coord,
+      };
+      updateOverlay();
+    };
+
+    const moveSelection = (clientX: number) => {
+      if (!selectionStateRef.current.active) return;
+      const prev = selectionStateRef.current;
+      selectionStateRef.current = {
+        ...prev,
+        currentX: getRelativeX(clientX),
+      };
+      updateOverlay();
+    };
+
+    const cancelSelection = () => {
+      if (!selectionStateRef.current.active) return;
+      selectionStateRef.current = { active: false, startX: 0, currentX: 0 };
+      setSelectionOverlay(prev => (prev.visible ? { visible: false, left: 0, width: 0 } : prev));
+    };
+
+    const finishSelection = () => {
+      if (!selectionStateRef.current.active) return;
+      const { startX, currentX } = selectionStateRef.current;
+      selectionStateRef.current = { active: false, startX: 0, currentX: 0 };
+      setSelectionOverlay(prev => (prev.visible ? { visible: false, left: 0, width: 0 } : prev));
+      applySelectionRange(startX, currentX);
+    };
+
+    const handleMouseDown = (event: MouseEvent) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      startSelection(event.clientX);
+    };
+
+    const handleMouseMove = (event: MouseEvent) => {
+      if (!selectionStateRef.current.active) return;
+      event.preventDefault();
+      moveSelection(event.clientX);
+    };
+
+    const handleMouseUp = (event: MouseEvent) => {
+      if (!selectionStateRef.current.active) return;
+      event.preventDefault();
+      finishSelection();
+    };
+
+    const handleTouchStart = (event: TouchEvent) => {
+      if (event.touches.length !== 1) return;
+      event.preventDefault();
+      startSelection(event.touches[0].clientX);
+    };
+
+    const handleTouchMove = (event: TouchEvent) => {
+      if (!selectionStateRef.current.active || event.touches.length !== 1) return;
+      event.preventDefault();
+      moveSelection(event.touches[0].clientX);
+    };
+
+    const handleTouchEnd = (event: TouchEvent) => {
+      if (!selectionStateRef.current.active) return;
+      event.preventDefault();
+      finishSelection();
+    };
+
+    container.addEventListener('mousedown', handleMouseDown);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    container.addEventListener('touchstart', handleTouchStart, { passive: false });
+    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+    window.addEventListener('touchend', handleTouchEnd);
+
+    return () => {
+      container.removeEventListener('mousedown', handleMouseDown);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      container.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+      cancelSelection();
+    };
+  }, [applySelectionRange]);
+
   // 移动端滚动处理 - 防止图表拦截页面滚动
   useEffect(() => {
     if (!isMobile || !chartContainerRef.current) return;
@@ -664,13 +833,21 @@ export default function InvestmentChart({
   }, [isMobile]);
 
   return (
-    <div className="w-full h-full relative">
+    <div
+      className="w-full relative"
+      style={{
+        minHeight: chartMinHeight,
+        maxHeight: chartMaxHeight,
+        height: chartMaxHeight,
+      }}
+    >
       <div
         ref={chartContainerRef}
         className="w-full h-full"
         style={{
-          minHeight: isMobile ? '300px' : '400px',
-          maxHeight: isMobile ? '50vh' : 'none', // 移动端限制最大高度
+          minHeight: chartMinHeight,
+          maxHeight: chartMaxHeight,
+          height: '100%',
           touchAction: 'pan-y', // 允许垂直滚动
           WebkitOverflowScrolling: 'touch' // iOS平滑滚动
         }}
@@ -680,6 +857,18 @@ export default function InvestmentChart({
           }
         }}
       />
+
+      {selectionOverlay.visible && (
+        <div
+          className="absolute inset-y-0 z-10 pointer-events-none"
+          style={{
+            left: `${selectionOverlay.left}px`,
+            width: `${selectionOverlay.width}px`,
+            background: 'rgba(74, 158, 255, 0.15)',
+            border: '1px solid rgba(74, 158, 255, 0.4)',
+          }}
+        />
+      )}
 
       {/* 图例 - 简化版，仅在小屏幕上显示 */}
       {isChartReady && isMobile && (
