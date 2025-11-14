@@ -38,23 +38,25 @@ export default function InvestmentChart({
   brushStartIndex = 0,
   brushEndIndex = 0,
   onToggleSeries,
-  seriesVisibility,
+  externalSeriesVisibility,
 }: InvestmentChartProps & {
   onToggleSeries?: (key: string) => void;
-  seriesVisibility?: any;
+  externalSeriesVisibility?: any;
 }) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<any[]>([]);
   const tooltipRef = useRef<HTMLDivElement | null>(null);
   const [isChartReady, setIsChartReady] = useState(false);
-  const [seriesVisibility, setSeriesVisibility] = useState({
+  const [internalSeriesVisibility, setInternalSeriesVisibility] = useState({
     cost: true,
     value: true,
     lumpSum: true,
     return: true,
     lumpSumReturn: true,
   });
+
+  const seriesVisibility = externalSeriesVisibility ?? internalSeriesVisibility;
 
   // 系列配置
   const seriesConfig = {
@@ -66,11 +68,15 @@ export default function InvestmentChart({
   };
 
   // 切换系列可见性
-  const toggleSeriesVisibility = (seriesKey: keyof typeof seriesVisibility) => {
-    setSeriesVisibility(prev => ({
-      ...prev,
-      [seriesKey]: !prev[seriesKey]
-    }));
+  const toggleSeriesVisibility = (seriesKey: keyof typeof internalSeriesVisibility) => {
+    if (onToggleSeries) {
+      onToggleSeries(seriesKey);
+    } else {
+      setInternalSeriesVisibility(prev => ({
+        ...prev,
+        [seriesKey]: !prev[seriesKey]
+      }));
+    }
   };
 
   // 处理缩放操作
@@ -296,21 +302,9 @@ export default function InvestmentChart({
         tickMarkFormatter: (time: any) => {
           try {
             const date = new Date(time);
-            if (isMobile) {
-              return `${date.getMonth() + 1}/${date.getDate()}`;
-            } else {
-              const now = new Date();
-              const diffTime = Math.abs(now.getTime() - date.getTime());
-              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-              if (diffDays < 30) {
-                return `${date.getMonth() + 1}/${date.getDate()}`;
-              } else if (diffDays < 365) {
-                return `${date.getMonth() + 1}月`;
-              } else {
-                return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
-              }
-            }
+            const year = date.getFullYear();
+            const month = (date.getMonth() + 1).toString().padStart(2, '0');
+            return `${year}-${month}`;
           } catch (error) {
             return time;
           }
