@@ -43,6 +43,30 @@ export default function InvestmentChart({
   const seriesRef = useRef<any[]>([]);
   const tooltipRef = useRef<HTMLDivElement | null>(null);
   const [isChartReady, setIsChartReady] = useState(false);
+  const [seriesVisibility, setSeriesVisibility] = useState({
+    cost: true,
+    value: true,
+    lumpSum: true,
+    return: true,
+    lumpSumReturn: true,
+  });
+
+  // 系列配置
+  const seriesConfig = {
+    cost: { name: '累计投入', color: '#00CED1' },
+    value: { name: '当前价值', color: '#FFD700' },
+    lumpSum: { name: '一次性投入', color: '#FF6BFF' },
+    return: { name: '定投年化收益率', color: '#4ECDC4' },
+    lumpSumReturn: { name: '一次性投入年化收益率', color: '#FF6BFF' },
+  };
+
+  // 切换系列可见性
+  const toggleSeriesVisibility = (seriesKey: keyof typeof seriesVisibility) => {
+    setSeriesVisibility(prev => ({
+      ...prev,
+      [seriesKey]: !prev[seriesKey]
+    }));
+  };
 
   // 转换数据为 lightweight-charts 格式
   const convertData = useCallback(() => {
@@ -380,84 +404,94 @@ export default function InvestmentChart({
 
     if (chartView === 'cost') {
       // 成本视图 - 添加三条曲线对比
-      const costSeries = chart.addSeries(LineSeries, {
-        color: '#00CED1',
-        lineWidth: 2,
-        crosshairMarkerVisible: true,
-        crosshairMarkerRadius: 4,
-        crosshairMarkerBackgroundColor: '#00CED1',
-        crosshairMarkerBorderColor: '#ffffff',
-        crosshairMarkerBorderWidth: 2,
-        
-        priceLineVisible: false, // 完全移除priceLine（最终点的水平线）
-      } as LineSeriesOptions);
-      costSeries.setData(costData);
-      seriesRef.current.push(costSeries);
+      if (seriesVisibility.cost) {
+        const costSeries = chart.addSeries(LineSeries, {
+          color: seriesConfig.cost.color,
+          lineWidth: 2,
+          crosshairMarkerVisible: true,
+          crosshairMarkerRadius: 4,
+          crosshairMarkerBackgroundColor: seriesConfig.cost.color,
+          crosshairMarkerBorderColor: '#ffffff',
+          crosshairMarkerBorderWidth: 2,
 
-      const valueSeries = chart.addSeries(LineSeries, {
-        color: '#FFD700',
-        lineWidth: 2,
-        crosshairMarkerVisible: true,
-        crosshairMarkerRadius: 4,
-        crosshairMarkerBackgroundColor: '#FFD700',
-        crosshairMarkerBorderColor: '#ffffff',
-        crosshairMarkerBorderWidth: 2,
-        
-        priceLineVisible: false, // 完全移除priceLine（最终点的水平线）
-      } as LineSeriesOptions);
-      valueSeries.setData(valueData);
-      seriesRef.current.push(valueSeries);
+          priceLineVisible: false, // 完全移除priceLine（最终点的水平线）
+        } as LineSeriesOptions);
+        costSeries.setData(costData);
+        seriesRef.current.push(costSeries);
+      }
+
+      if (seriesVisibility.value) {
+        const valueSeries = chart.addSeries(LineSeries, {
+          color: seriesConfig.value.color,
+          lineWidth: 2,
+          crosshairMarkerVisible: true,
+          crosshairMarkerRadius: 4,
+          crosshairMarkerBackgroundColor: seriesConfig.value.color,
+          crosshairMarkerBorderColor: '#ffffff',
+          crosshairMarkerBorderWidth: 2,
+
+          priceLineVisible: false, // 完全移除priceLine（最终点的水平线）
+        } as LineSeriesOptions);
+        valueSeries.setData(valueData);
+        seriesRef.current.push(valueSeries);
+      }
 
       // 添加一次性投入曲线
-      const lumpSumSeries = chart.addSeries(LineSeries, {
-        color: '#FF6BFF', // 紫色，便于区分
-        lineWidth: 2,
-        crosshairMarkerVisible: true,
-        crosshairMarkerRadius: 4,
-        crosshairMarkerBackgroundColor: '#FF6BFF',
-        crosshairMarkerBorderColor: '#ffffff',
-        crosshairMarkerBorderWidth: 2,
-        
-        priceLineVisible: false, // 完全移除priceLine（最终点的水平线）
-      } as LineSeriesOptions);
-      lumpSumSeries.setData(lumpSumData);
-      seriesRef.current.push(lumpSumSeries);
+      if (seriesVisibility.lumpSum) {
+        const lumpSumSeries = chart.addSeries(LineSeries, {
+          color: seriesConfig.lumpSum.color, // 紫色，便于区分
+          lineWidth: 2,
+          crosshairMarkerVisible: true,
+          crosshairMarkerRadius: 4,
+          crosshairMarkerBackgroundColor: seriesConfig.lumpSum.color,
+          crosshairMarkerBorderColor: '#ffffff',
+          crosshairMarkerBorderWidth: 2,
+
+          priceLineVisible: false, // 完全移除priceLine（最终点的水平线）
+        } as LineSeriesOptions);
+        lumpSumSeries.setData(lumpSumData);
+        seriesRef.current.push(lumpSumSeries);
+      }
     } else {
       // 收益率视图 - 添加定投和一次性投入的收益率曲线对比
-      const returnSeries = chart.addSeries(BaselineSeries, {
-        baseValue: { type: 'price', price: 0 },
-        topLineColor: '#4ECDC4',
-        topFillColor1: 'rgba(78, 205, 196, 0.3)',
-        topFillColor2: 'rgba(78, 205, 196, 0.05)',
-        bottomLineColor: '#FF6B6B',
-        bottomFillColor1: 'rgba(255, 107, 107, 0.3)',
-        bottomFillColor2: 'rgba(255, 107, 107, 0.05)',
-        lineWidth: 2,
-        crosshairMarkerVisible: true,
-        crosshairMarkerRadius: 4,
-        crosshairMarkerBackgroundColor: '#4ECDC4',
-        crosshairMarkerBorderColor: '#ffffff',
-        crosshairMarkerBorderWidth: 2,
-        
-        priceLineVisible: false, // 完全移除priceLine（最终点的水平线）
-      } as any);
-      returnSeries.setData(returnData);
-      seriesRef.current.push(returnSeries);
+      if (seriesVisibility.return) {
+        const returnSeries = chart.addSeries(BaselineSeries, {
+          baseValue: { type: 'price', price: 0 },
+          topLineColor: seriesConfig.return.color,
+          topFillColor1: 'rgba(78, 205, 196, 0.3)',
+          topFillColor2: 'rgba(78, 205, 196, 0.05)',
+          bottomLineColor: '#FF6B6B',
+          bottomFillColor1: 'rgba(255, 107, 107, 0.3)',
+          bottomFillColor2: 'rgba(255, 107, 107, 0.05)',
+          lineWidth: 2,
+          crosshairMarkerVisible: true,
+          crosshairMarkerRadius: 4,
+          crosshairMarkerBackgroundColor: seriesConfig.return.color,
+          crosshairMarkerBorderColor: '#ffffff',
+          crosshairMarkerBorderWidth: 2,
+
+          priceLineVisible: false, // 完全移除priceLine（最终点的水平线）
+        } as any);
+        returnSeries.setData(returnData);
+        seriesRef.current.push(returnSeries);
+      }
 
       // 添加一次性投入年化收益率曲线
-      const lumpSumReturnSeries = chart.addSeries(LineSeries, {
-        color: '#FF6BFF', // 紫色，便于区分
-        lineWidth: 2,
-        crosshairMarkerVisible: true,
-        crosshairMarkerRadius: 4,
-        crosshairMarkerBackgroundColor: '#FF6BFF',
-        crosshairMarkerBorderColor: '#ffffff',
-        crosshairMarkerBorderWidth: 2,
-        
-        priceLineVisible: false, // 完全移除priceLine（最终点的水平线）
-      } as LineSeriesOptions);
-      lumpSumReturnSeries.setData(lumpSumReturnData);
-      seriesRef.current.push(lumpSumReturnSeries);
+      if (seriesVisibility.lumpSumReturn) {
+        const lumpSumReturnSeries = chart.addSeries(LineSeries, {
+          color: seriesConfig.lumpSumReturn.color, // 紫色，便于区分
+          lineWidth: 2,
+          crosshairMarkerVisible: true,
+          crosshairMarkerRadius: 4,
+          crosshairMarkerBackgroundColor: seriesConfig.lumpSumReturn.color,
+          crosshairMarkerBorderColor: '#ffffff',
+          crosshairMarkerBorderWidth: 2,
+
+          priceLineVisible: false, // 完全移除priceLine（最终点的水平线）
+        } as LineSeriesOptions);
+        lumpSumReturnSeries.setData(lumpSumReturnData);
+        seriesRef.current.push(lumpSumReturnSeries);
+      }
     }
 
     // 设置工具提示
@@ -494,7 +528,7 @@ export default function InvestmentChart({
     return () => {
       chart.timeScale().unsubscribeVisibleTimeRangeChange(handleVisibleTimeRangeChange);
     };
-  }, [chartView, isChartReady, convertData, data, onZoomChange, brushStartIndex, brushEndIndex, setupTooltip]);
+  }, [chartView, isChartReady, convertData, data, onZoomChange, brushStartIndex, brushEndIndex, setupTooltip, seriesVisibility]);
 
   // 处理窗口大小变化
   useEffect(() => {
@@ -574,6 +608,90 @@ export default function InvestmentChart({
           WebkitOverflowScrolling: 'touch' // iOS平滑滚动
         }}
       />
+
+      {/* 图例 - 显示在左上方 */}
+      {isChartReady && (
+        <div className="absolute top-4 left-4 bg-black bg-opacity-80 rounded-lg p-3 z-10 backdrop-blur-sm border border-gray-700"
+          style={{
+            fontSize: isMobile ? '11px' : '12px',
+            fontFamily: 'system-ui, -apple-system, sans-serif'
+          }}
+        >
+          <div className="space-y-2">
+            {chartView === 'cost' ? (
+              <>
+                <button
+                  onClick={() => toggleSeriesVisibility('cost')}
+                  className={`flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
+                    seriesVisibility.cost ? 'opacity-100' : 'opacity-50'
+                  }`}
+                >
+                  <div
+                    className="w-3 h-0.5 rounded"
+                    style={{ backgroundColor: seriesConfig.cost.color }}
+                  />
+                  <span className="text-gray-200">{seriesConfig.cost.name}</span>
+                </button>
+
+                <button
+                  onClick={() => toggleSeriesVisibility('value')}
+                  className={`flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
+                    seriesVisibility.value ? 'opacity-100' : 'opacity-50'
+                  }`}
+                >
+                  <div
+                    className="w-3 h-0.5 rounded"
+                    style={{ backgroundColor: seriesConfig.value.color }}
+                  />
+                  <span className="text-gray-200">{seriesConfig.value.name}</span>
+                </button>
+
+                <button
+                  onClick={() => toggleSeriesVisibility('lumpSum')}
+                  className={`flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
+                    seriesVisibility.lumpSum ? 'opacity-100' : 'opacity-50'
+                  }`}
+                >
+                  <div
+                    className="w-3 h-0.5 rounded"
+                    style={{ backgroundColor: seriesConfig.lumpSum.color }}
+                  />
+                  <span className="text-gray-200">{seriesConfig.lumpSum.name}</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => toggleSeriesVisibility('return')}
+                  className={`flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
+                    seriesVisibility.return ? 'opacity-100' : 'opacity-50'
+                  }`}
+                >
+                  <div
+                    className="w-3 h-0.5 rounded"
+                    style={{ backgroundColor: seriesConfig.return.color }}
+                  />
+                  <span className="text-gray-200">{seriesConfig.return.name}</span>
+                </button>
+
+                <button
+                  onClick={() => toggleSeriesVisibility('lumpSumReturn')}
+                  className={`flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
+                    seriesVisibility.lumpSumReturn ? 'opacity-100' : 'opacity-50'
+                  }`}
+                >
+                  <div
+                    className="w-3 h-0.5 rounded"
+                    style={{ backgroundColor: seriesConfig.lumpSumReturn.color }}
+                  />
+                  <span className="text-gray-200">{seriesConfig.lumpSumReturn.name}</span>
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {!isChartReady && (
         <div className="absolute inset-0 flex items-center justify-center bg-[#151515] rounded-xl">
           <div className="text-center text-[#666]">
