@@ -672,17 +672,42 @@ export default function Home() {
                     position: 'relative'
                   }}
                 >
-                  <div className="flex items-center justify-between px-4 py-3 border-b border-[#2a2a2a]">
-                    <h3 className="text-white text-base md:text-lg font-semibold">
-                      {chartView === 'cost' ? '收益表' : '收益率表'}
-                    </h3>
-                    <button
-                      onClick={() => setChartView(chartView === 'cost' ? 'return' : 'cost')}
-                      className="px-3 py-1.5 text-xs font-medium rounded-lg bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#2a2a2a] hover:border-[#4a9eff] hover:text-[#4a9eff] active:scale-95 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#4a9eff]/50 touch-manipulation"
-                      aria-label="切换视图"
-                    >
-                      {chartView === 'cost' ? '切换到收益率表' : '切换到收益表'}
-                    </button>
+                  <div className="flex flex-col gap-3 px-4 py-3 border-b border-[#2a2a2a]">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-white text-base md:text-lg font-semibold">
+                          {chartView === 'cost' ? '收益表' : '收益率表'}
+                        </h3>
+                        {chartData.length > 0 && brushEndIndex >= brushStartIndex && (
+                          <span className="text-xs md:text-sm text-[#888] font-medium">
+                            {format(new Date(chartData[Math.max(0, Math.min(chartData.length - 1, brushStartIndex))].date), 'yyyy-MM-dd')}
+                            {' ~ '}
+                            {format(new Date(chartData[Math.max(0, Math.min(chartData.length - 1, brushEndIndex))].date), 'yyyy-MM-dd')}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setChartView(chartView === 'cost' ? 'return' : 'cost')}
+                          className="inline-flex items-center rounded-md border border-[#2a2a2a] bg-[#1f1f1f] px-3 py-1.5 text-xs font-medium text-[#d0d0d0] shadow-sm hover:bg-[#2a2a2a] hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4a9eff]/70"
+                          aria-label="切换视图"
+                        >
+                          {chartView === 'cost' ? '切换到收益率表' : '切换到收益表'}
+                        </button>
+                        {chartData.length > 0 && (
+                          <button
+                            onClick={() => {
+                              setBrushStartIndex(0);
+                              setBrushEndIndex(chartData.length - 1);
+                            }}
+                            className="inline-flex items-center rounded-md border border-[#2a2a2a] bg-[#1f1f1f] px-3 py-1.5 text-xs font-medium text-[#d0d0d0] shadow-sm hover:bg-[#2a2a2a] hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4a9eff]/70"
+                            aria-label="重置区间"
+                          >
+                            重置区间
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
                   <InvestmentChart
                     data={chartData}
@@ -697,70 +722,7 @@ export default function Home() {
                   />
                 </div>
 
-                {/* 图表控制工具栏 - 放在图表下方，不遮挡 */}
-                {stats && (
-                  <div className="flex flex-col md:flex-row gap-2 p-3 md:p-3 bg-[#1c1c1c]/50 rounded-xl border border-[#2a2a2a] backdrop-blur-sm">
-                    {/* 左侧：缩放控制 */}
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-[#888] font-medium">缩放:</span>
-                      <button
-                        onClick={() => {
-                          // 放大逻辑
-                          const zoomFactor = 0.8;
-                          const center = Math.floor((brushStartIndex + brushEndIndex) / 2);
-                          const range = brushEndIndex - brushStartIndex;
-                          const newRange = Math.max(Math.floor(range * zoomFactor), 10);
-                          const newStart = Math.max(0, center - Math.floor(newRange / 2));
-                          const newEnd = Math.min(chartData.length - 1, center + Math.floor(newRange / 2));
-                          setBrushStartIndex(newStart);
-                          setBrushEndIndex(newEnd);
-                        }}
-                        className="px-2 py-1 rounded text-xs bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#4a9eff] hover:text-white hover:border-[#4a9eff] transition-all duration-200 active:scale-95"
-                        title="放大视图"
-                      >
-                        🔍+
-                      </button>
-                      <button
-                        onClick={() => {
-                          // 缩小逻辑
-                          const zoomFactor = 1.25;
-                          const center = Math.floor((brushStartIndex + brushEndIndex) / 2);
-                          const range = brushEndIndex - brushStartIndex;
-                          const newRange = Math.min(Math.floor(range * zoomFactor), chartData.length - 1);
-                          const newStart = Math.max(0, center - Math.floor(newRange / 2));
-                          const newEnd = Math.min(chartData.length - 1, center + Math.floor(newRange / 2));
-                          setBrushStartIndex(newStart);
-                          setBrushEndIndex(newEnd);
-                        }}
-                        className="px-2 py-1 rounded text-xs bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#4a9eff] hover:text-white hover:border-[#4a9eff] transition-all duration-200 active:scale-95"
-                        title="缩小视图"
-                      >
-                        🔍-
-                      </button>
-                      <button
-                        onClick={() => {
-                          setBrushStartIndex(0);
-                          setBrushEndIndex(chartData.length - 1);
-                        }}
-                        className="px-2 py-1 rounded text-xs bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#4a9eff] hover:text-white hover:border-[#4a9eff] transition-all duration-200 active:scale-95"
-                        title="重置缩放"
-                      >
-                        🔄 重置
-                      </button>
-                    </div>
-
-                    {/* 中间：当前范围显示或提示 */}
-                    <div className="flex-1 flex items-center justify-center">
-                      <span className="text-xs text-[#888]">
-                        {chartData.length > 0 && (
-                          <span>
-                            显示: {format(new Date(chartData[brushStartIndex].date), 'yyyy-MM-dd')} ~ {format(new Date(chartData[brushEndIndex].date), 'yyyy-MM-dd')}
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                )}
+                {/* 图表控制工具栏已移动至标题区域 */}
               </div>
 
               {/* 定投记录表格 */}

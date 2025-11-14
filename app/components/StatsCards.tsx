@@ -52,7 +52,7 @@ export function StatsCard({
           </div>
 
           {/* 主要数值 */}
-          <div className={`text-lg md:text-2xl font-bold mb-2 truncate ${trendColors[trend]}`}
+          <div className={`text-lg md:text-2xl font-bold mb-2 break-words ${trendColors[trend]}`}
                style={{ textShadow: trend === 'positive' ? '0 0 8px rgba(255,77,77,0.3)' :
                                   trend === 'negative' ? '0 0 8px rgba(82,196,130,0.3)' : 'none' }}
           >
@@ -62,7 +62,7 @@ export function StatsCard({
           {/* 辅助信息 */}
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs text-[#666]">{subtitle}</span>
-            <span className="text-[11px] md:text-xs text-[#888] font-medium truncate">
+            <span className="text-[11px] md:text-xs text-[#888] font-medium break-words">
               {subValue}
             </span>
           </div>
@@ -111,11 +111,21 @@ export function StatsCards({ stats, startDate, endDate }: StatsCardsProps) {
         trend="neutral"
       />
 
-      {/* 卡片2: 收益对比分析 */}
+      {/* 卡片2: 区间收益率 */}
       <StatsCard
         icon="📈"
-        title="收益对比分析"
-        value={`${stats.dcaProfitRate >= 0 ? '+' : ''}${stats.dcaProfitRate.toFixed(2)}% / ${stats.lumpSumProfitRate >= 0 ? '+' : ''}${stats.lumpSumProfitRate.toFixed(2)}%`}
+        title="区间收益率"
+        value={
+          <>
+            <span className={dcaIsBetter ? 'text-red-400' : 'text-[#888]'}>
+              定投：{stats.dcaProfitRate >= 0 ? '+' : ''}{stats.dcaProfitRate.toFixed(2)}%
+            </span>
+            <br />
+            <span className={!dcaIsBetter ? 'text-red-400' : 'text-[#888]'}>
+              一次性：{stats.lumpSumProfitRate >= 0 ? '+' : ''}{stats.lumpSumProfitRate.toFixed(2)}%
+            </span>
+          </>
+        }
         subtitle="结论"
         subValue={`${winnerText} (${profitDiff}%)`}
         accentColor="#4a9eff"
@@ -126,22 +136,42 @@ export function StatsCards({ stats, startDate, endDate }: StatsCardsProps) {
       <StatsCard
         icon="💼"
         title="资产增长分析"
-        value={`¥${Number(stats.finalAssetValue.toFixed(2)).toLocaleString('zh-CN')} / ¥${Number(stats.lumpSumFinalAsset.toFixed(2)).toLocaleString('zh-CN')}`}
+        value={
+          <>
+            <span className={dcaIsBetter ? 'text-red-400' : 'text-[#888]'}>
+              定投：¥{Number(stats.finalAssetValue.toFixed(2)).toLocaleString('zh-CN')}
+            </span>
+            <br />
+            <span className={!dcaIsBetter ? 'text-red-400' : 'text-[#888]'}>
+              一次性：¥{Number(stats.lumpSumFinalAsset.toFixed(2)).toLocaleString('zh-CN')}
+            </span>
+          </>
+        }
         subtitle="对比"
         subValue={`${dcaIsBetter ? '定投 > 一次性' : '一次性 > 定投'} (¥${Number(assetDiff).toLocaleString('zh-CN')})`}
         accentColor="#FF6BFF"
         trend={dcaIsBetter ? 'positive' : 'negative'}
       />
 
-      {/* 卡片4: 收益效率指标 */}
+      {/* 卡片4: 年化收益率 */}
       <StatsCard
         icon="⚡"
-        title="收益效率指标"
-        value={`${stats.dcaAnnualizedReturn >= 0 ? '+' : ''}${stats.dcaAnnualizedReturn.toFixed(2)}% / ${stats.lumpSumAnnualizedReturn >= 0 ? '+' : ''}${stats.lumpSumAnnualizedReturn.toFixed(2)}%`}
-        subtitle="策略评价"
-        subValue={`${dcaIsBetter ? '定投策略更优' : '一次性策略更优'}`}
+        title="年化收益率"
+        value={
+          <>
+            <span className={stats.dcaAnnualizedReturn >= stats.lumpSumAnnualizedReturn ? 'text-red-400' : 'text-[#888]'}>
+              定投：{stats.dcaAnnualizedReturn >= 0 ? '+' : ''}{stats.dcaAnnualizedReturn.toFixed(2)}%
+            </span>
+            <br />
+            <span className={stats.lumpSumAnnualizedReturn >= stats.dcaAnnualizedReturn ? 'text-red-400' : 'text-[#888]'}>
+              一次性：{stats.lumpSumAnnualizedReturn >= 0 ? '+' : ''}{stats.lumpSumAnnualizedReturn.toFixed(2)}%
+            </span>
+          </>
+        }
+        subtitle="效率差距"
+        subValue={`年化差值 ${Math.abs(stats.dcaAnnualizedReturn - stats.lumpSumAnnualizedReturn).toFixed(2)}%`}
         accentColor="#00CED1"
-        trend={dcaIsBetter ? 'positive' : 'negative'}
+        trend={stats.dcaAnnualizedReturn >= stats.lumpSumAnnualizedReturn ? 'positive' : 'negative'}
       />
     </div>
   );
