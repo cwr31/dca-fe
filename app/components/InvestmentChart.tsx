@@ -494,17 +494,23 @@ export default function InvestmentChart({
       }
     }
 
-    // 设置工具提示
-    setupTooltip();
+    // 设置工具提示（只在有系列数据时设置）
+    if (seriesRef.current.length > 0) {
+      setupTooltip();
+    }
 
     // 设置可见范围
-    if (brushStartIndex >= 0 && brushEndIndex > 0) {
+    if (brushStartIndex >= 0 && brushEndIndex > 0 && seriesRef.current.length > 0) {
       const visibleData = data.slice(brushStartIndex, brushEndIndex + 1);
       if (visibleData.length > 0) {
-        chart.timeScale().setVisibleRange({
-          from: visibleData[0].date as any,
-          to: visibleData[visibleData.length - 1].date as any,
-        });
+        try {
+          chart.timeScale().setVisibleRange({
+            from: visibleData[0].date as any,
+            to: visibleData[visibleData.length - 1].date as any,
+          });
+        } catch (error) {
+          console.warn('设置可见范围失败:', error);
+        }
       }
     }
 
@@ -688,6 +694,16 @@ export default function InvestmentChart({
                 </button>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* 当没有曲线被选中时的空状态 */}
+      {isChartReady && seriesRef.current.length === 0 && (
+        <div className="absolute inset-0 flex items-center justify-center bg-[#151515] rounded-xl">
+          <div className="text-center text-[#666]">
+            <div className="text-lg mb-2">📈</div>
+            <div className="text-sm">请选择至少一条曲线来显示图表</div>
           </div>
         </div>
       )}
