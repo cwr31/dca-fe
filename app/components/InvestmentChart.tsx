@@ -37,7 +37,12 @@ export default function InvestmentChart({
   onZoomChange,
   brushStartIndex = 0,
   brushEndIndex = 0,
-}: InvestmentChartProps) {
+  onToggleSeries,
+  seriesVisibility,
+}: InvestmentChartProps & {
+  onToggleSeries?: (key: string) => void;
+  seriesVisibility?: any;
+}) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<any[]>([]);
@@ -67,6 +72,68 @@ export default function InvestmentChart({
       [seriesKey]: !prev[seriesKey]
     }));
   };
+
+  // 处理缩放操作
+  const handleZoom = useCallback((action: 'in' | 'out' | 'reset') => {
+    if (!chartRef.current || !data || data.length === 0) return;
+
+    const chart = chartRef.current;
+    const visibleRange = chart.timeScale().getVisibleRange();
+
+    if (!visibleRange) return;
+
+    const startIndex = data.findIndex(item => item.date === visibleRange.from);
+    const endIndex = data.findIndex(item => item.date === visibleRange.to);
+
+    if (startIndex === -1 || endIndex === -1) return;
+
+    const currentRange = endIndex - startIndex;
+    const centerIndex = Math.floor((startIndex + endIndex) / 2);
+
+    let newStartIndex: number;
+    let newEndIndex: number;
+
+    switch (action) {
+      case 'in':
+        // 放大：缩小显示范围
+        const zoomInFactor = 0.8; // 每次缩小到80%
+        const newRangeIn = Math.max(Math.floor(currentRange * zoomInFactor), 10); // 最小显示10个点
+        newStartIndex = Math.max(0, centerIndex - Math.floor(newRangeIn / 2));
+        newEndIndex = Math.min(data.length - 1, centerIndex + Math.floor(newRangeIn / 2));
+        break;
+
+      case 'out':
+        // 缩小：扩大显示范围
+        const zoomOutFactor = 1.25; // 每次扩大到125%
+        const newRangeOut = Math.min(Math.floor(currentRange * zoomOutFactor), data.length - 1);
+        newStartIndex = Math.max(0, centerIndex - Math.floor(newRangeOut / 2));
+        newEndIndex = Math.min(data.length - 1, centerIndex + Math.floor(newRangeOut / 2));
+        break;
+
+      case 'reset':
+        // 重置：显示全部数据
+        newStartIndex = 0;
+        newEndIndex = data.length - 1;
+        break;
+
+      default:
+        return;
+    }
+
+    // 设置新的可见范围
+    const newVisibleData = data.slice(newStartIndex, newEndIndex + 1);
+    if (newVisibleData.length > 0 && onZoomChange) {
+      onZoomChange(newStartIndex, newEndIndex);
+      try {
+        chart.timeScale().setVisibleRange({
+          from: newVisibleData[0].date as any,
+          to: newVisibleData[newVisibleData.length - 1].date as any,
+        });
+      } catch (error) {
+        console.warn('缩放操作失败:', error);
+      }
+    }
+  }, [data, onZoomChange]);
 
   // 转换数据为 lightweight-charts 格式
   const convertData = useCallback(() => {
@@ -613,13 +680,18 @@ export default function InvestmentChart({
           touchAction: 'pan-y', // 允许垂直滚动
           WebkitOverflowScrolling: 'touch' // iOS平滑滚动
         }}
+        onDoubleClick={() => {
+          if (isChartReady) {
+            handleZoom('reset');
+          }
+        }}
       />
 
-      {/* 图例 - 显示在左上方 */}
-      {isChartReady && (
-        <div className="absolute top-4 left-4 bg-black bg-opacity-80 rounded-lg p-3 z-10 backdrop-blur-sm border border-gray-700"
+      {/* 图例 - 简化版，仅在小屏幕上显示 */}
+      {isChartReady && isMobile && (
+        <div className="absolute bottom-2 left-2 bg-[rgba(26,26,26,0.9)] rounded p-1.5 z-10 backdrop-blur-sm border border-[#2a2a2a]"
           style={{
-            fontSize: isMobile ? '11px' : '12px',
+            fontSize: '10px',
             fontFamily: 'system-ui, -apple-system, sans-serif'
           }}
         >

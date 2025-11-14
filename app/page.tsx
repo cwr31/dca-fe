@@ -4,10 +4,19 @@ import { useState, useEffect, useMemo } from 'react';
 import { format, subYears } from 'date-fns';
 import dynamic from 'next/dynamic';
 
-// 动态导入InvestmentChart组件以避免SSR问题
+// 动态导入组件以避免SSR问题
 const InvestmentChart = dynamic(() => import('./components/InvestmentChart'), {
   ssr: false,
   loading: () => <div className="w-full h-full flex items-center justify-center"><div className="text-center text-[#666]"><div className="text-lg mb-2">📊</div><div className="text-sm">正在加载图表...</div></div></div>
+});
+
+const StatsCards = dynamic(() => import('./components/StatsCards').then((mod) => ({ default: mod.StatsCards })), {
+  ssr: false,
+  loading: () => <div className="w-full h-full flex items-center justify-center"><div className="text-sm text-[#666]">加载统计卡片...</div></div>
+});
+
+const StatsSkeleton = dynamic(() => import('./components/Skeleton').then((mod) => ({ default: mod.StatsSkeleton })), {
+  ssr: false
 });
 
 interface FundData {
@@ -616,118 +625,146 @@ export default function Home() {
                 </button>
               </div>
 
-              {/* 回测统计 */}
-              {stats && (
-                <div className="mb-3 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-1 h-5 bg-gradient-to-b from-[#4a9eff] to-[#0066cc] rounded-full"></div>
-                    <h3 className="text-white text-sm md:text-base font-bold tracking-wide">回测统计</h3>
-                  </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2 md:gap-3">
-                    <div className="bg-[#1c1c1c]/90 p-2.5 rounded-lg border border-[#2a2a2a]">
-                      <div className="text-[#888] text-[11px] md:text-xs font-medium mb-0.5">定投总期数</div>
-                      <div className="text-white text-sm md:text-base font-semibold leading-tight">{investmentRecords.length}期</div>
-                    </div>
-                    <div className="bg-[#1c1c1c]/90 p-2.5 rounded-lg border border-[#2a2a2a]">
-                      <div className="text-[#888] text-[11px] md:text-xs font-medium mb-0.5">投入总本金（元）</div>
-                      <div className="text-white text-sm md:text-base font-semibold leading-tight">¥{Number(stats.totalInvestment.toFixed(2)).toLocaleString('zh-CN')}</div>
-                    </div>
-                    <div className="bg-[#1c1c1c]/90 p-2.5 rounded-lg border border-[#2a2a2a]">
-                      <div className="text-[#888] text-[11px] md:text-xs font-medium mb-0.5">定投期末总资产（元）</div>
-                      <div className="text-white text-sm md:text-base font-semibold leading-tight">¥{Number(stats.currentValue.toFixed(2)).toLocaleString('zh-CN')}</div>
-                    </div>
-                    <div className="bg-[#1c1c1c]/90 p-2.5 rounded-lg border border-[#2a2a2a]">
-                      <div className="text-[#888] text-[11px] md:text-xs font-medium mb-0.5">定投收益率</div>
-                      <div className={`text-sm md:text-base font-semibold leading-tight ${stats.profitRate >= 0 ? 'text-[#ff4d4f]' : 'text-[#52c41a]'}`}>
-                        {stats.profitRate >= 0 ? '+' : ''}{stats.profitRate.toFixed(2)}%
-                      </div>
-                    </div>
-                    <div className="bg-[#1c1c1c]/90 p-2.5 rounded-lg border border-[#2a2a2a]">
-                      <div className="text-[#888] text-[11px] md:text-xs font-medium mb-0.5">定投年化收益率</div>
-                      <div className={`text-sm md:text-base font-semibold leading-tight ${stats.profitRate >= 0 ? 'text-[#ff4d4f]' : 'text-[#52c41a]'}`}>
-                        {stats.profitRate >= 0 ? '+' : ''}{stats.annualizedReturnRate?.toFixed(2) || '0.00'}%
-                      </div>
-                    </div>
-                    <div className="bg-[#1c1c1c]/90 p-2.5 rounded-lg border border-[#2a2a2a]">
-                      <div className="text-[#888] text-[11px] md:text-xs font-medium mb-0.5">一次性投入期末总资产（元）</div>
-                      <div className="text-white text-sm md:text-base font-semibold leading-tight">¥{Number((stats.totalInvestment * (1 + stats.priceChangePercent / 100)).toFixed(2)).toLocaleString('zh-CN')}</div>
-                    </div>
-                    <div className="bg-[#1c1c1c]/90 p-2.5 rounded-lg border border-[#2a2a2a]">
-                      <div className="text-[#888] text-[11px] md:text-xs font-medium mb-0.5">一次性投入收益率</div>
-                      <div className={`text-sm md:text-base font-semibold leading-tight ${stats.priceChangePercent >= 0 ? 'text-[#ff4d4f]' : 'text-[#52c41a]'}`}>
-                        {stats.priceChangePercent >= 0 ? '+' : ''}{stats.priceChangePercent.toFixed(2)}%
-                      </div>
-                    </div>
-                    <div className="bg-[#1c1c1c]/90 p-2.5 rounded-lg border border-[#2a2a2a]">
-                      <div className="text-[#888] text-[11px] md:text-xs font-medium mb-0.5">一次性投入年化收益率</div>
-                      <div className={`text-sm md:text-base font-semibold leading-tight ${stats.priceChangePercent >= 0 ? 'text-[#ff4d4f]' : 'text-[#52c41a]'}`}>
-                        {(() => {
-                          const daysDiff = stats.startDate && chartData.length > 0
-                            ? Math.ceil((new Date(chartData[chartData.length - 1].date).getTime() - new Date(stats.startDate).getTime()) / (1000 * 60 * 60 * 24))
-                            : 365;
-                          const annualizedReturn = daysDiff > 0
-                            ? ((Math.pow(1 + stats.priceChangePercent / 100, 365 / daysDiff) - 1) * 100)
-                            : 0;
-                          return (stats.priceChangePercent >= 0 ? '+' : '') + annualizedReturn.toFixed(2);
-                        })()}%
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-              <div
-                className="flex-1 bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl p-2 md:p-4 border border-[#2a2a2a] shadow-2xl mb-2"
-                style={{
-                  minHeight: isMobile ? '300px' : '400px',
-                  maxHeight: isMobile ? '60vh' : 'none', // 移动端限制最大高度
-                  overflow: 'hidden', // 防止内容溢出
-                  position: 'relative'
-                }}
-              >
-                <InvestmentChart
-                  data={chartData}
-                  chartView={chartView}
-                  isMobile={isMobile}
-                  onZoomChange={(start, end) => {
-                    setBrushStartIndex(start);
-                    setBrushEndIndex(end);
-                  }}
-                  brushStartIndex={brushStartIndex}
-                  brushEndIndex={brushEndIndex > 0 ? brushEndIndex : (chartData.length > 0 ? chartData.length - 1 : 0)}
-                />
-              </div>
-              {/* 缩放控制按钮 */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 mb-2 flex-shrink-0">
-                <button
-                  onClick={() => {
-                    setBrushStartIndex(0);
-                    setBrushEndIndex(chartData.length - 1);
-                  }}
-                  className="px-3 py-2 md:py-1.5 text-xs font-medium rounded-lg bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#2a2a2a] hover:border-[#4a9eff] hover:text-[#4a9eff] active:scale-95 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#4a9eff]/50 touch-manipulation"
-                  title="重置缩放"
-                >
-                  🔍 重置缩放
-                </button>
-                <div className="text-xs text-[#888] flex-1 w-full sm:w-auto">
-                  {chartData.length > 0 && (
-                    <span className="break-words">
-                      显示范围: {format(new Date(chartData[brushStartIndex]?.date || chartData[0]?.date), isMobile ? 'MM/dd' : 'yyyy-MM-dd')} 
-                      ~ {format(new Date(chartData[brushEndIndex || chartData.length - 1]?.date || chartData[chartData.length - 1]?.date), isMobile ? 'MM/dd' : 'yyyy-MM-dd')}
-                    </span>
-                  )}
-                </div>
-              </div>
+              {/* 回测统计 - 新布局：4组对比卡片 */}
+              {stats ? (
+                <StatsCards stats={(() => {
+                  const statsData = {
+                    totalPeriods: investmentRecords.length,
+                    totalInvestment: stats.totalInvestment,
+                    averageInvestment: stats.totalInvestment / (investmentRecords.length || 1),
+                    finalAssetValue: stats.currentValue,
+                    dcaProfitRate: stats.profitRate,
+                    dcaAnnualizedReturn: stats.annualizedReturnRate || 0,
+                    lumpSumFinalAsset: stats.totalInvestment * (1 + stats.priceChangePercent / 100),
+                    lumpSumProfitRate: stats.priceChangePercent,
+                    lumpSumAnnualizedReturn: (() => {
+                      const daysDiff = stats.startDate && chartData.length > 0
+                        ? Math.ceil((new Date(chartData[chartData.length - 1].date).getTime() - new Date(stats.startDate).getTime()) / (1000 * 60 * 60 * 24))
+                        : 365;
+                      return daysDiff > 0
+                        ? ((Math.pow(1 + stats.priceChangePercent / 100, 365 / daysDiff) - 1) * 100)
+                        : 0;
+                    })()
+                  };
 
+                  return statsData;
+                })()} startDate={stats.startDate} endDate={chartData.length > 0 ? chartData[chartData.length - 1].date : undefined} />
+              ) : chartData.length > 0 ? (
+                // 如果chartData有数据但stats还在加载，显示骨架屏
+                <StatsSkeleton count={4} />
+              ) : null}
+              <div className="flex flex-col gap-2">
+                {/* 图表区域 - 无遮挡，全区域显示 */}
+                <div
+                  className="bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl p-0 border border-[#2a2a2a] shadow-2xl"
+                  style={{
+                    minHeight: isMobile ? '300px' : '400px',
+                    maxHeight: isMobile ? '60vh' : 'none', // 移动端限制最大高度
+                    overflow: 'hidden', // 防止内容溢出
+                    position: 'relative'
+                  }}
+                >
+                  <InvestmentChart
+                    data={chartData}
+                    chartView={chartView}
+                    isMobile={isMobile}
+                    onZoomChange={(start, end) => {
+                      setBrushStartIndex(start);
+                      setBrushEndIndex(end);
+                    }}
+                    brushStartIndex={brushStartIndex}
+                    brushEndIndex={brushEndIndex > 0 ? brushEndIndex : (chartData.length > 0 ? chartData.length - 1 : 0)}
+                  />
+                </div>
+
+                {/* 图表控制工具栏 - 放在图表下方，不遮挡 */}
+                {stats && (
+                  <div className="flex flex-col md:flex-row gap-2 p-3 md:p-3 bg-[#1c1c1c]/50 rounded-xl border border-[#2a2a2a] backdrop-blur-sm">
+                    {/* 左侧：缩放控制 */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-[#888] font-medium">缩放:</span>
+                      <button
+                        onClick={() => {
+                          // 放大逻辑
+                          const zoomFactor = 0.8;
+                          const center = Math.floor((brushStartIndex + brushEndIndex) / 2);
+                          const range = brushEndIndex - brushStartIndex;
+                          const newRange = Math.max(Math.floor(range * zoomFactor), 10);
+                          const newStart = Math.max(0, center - Math.floor(newRange / 2));
+                          const newEnd = Math.min(chartData.length - 1, center + Math.floor(newRange / 2));
+                          setBrushStartIndex(newStart);
+                          setBrushEndIndex(newEnd);
+                        }}
+                        className="px-2 py-1 rounded text-xs bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#4a9eff] hover:text-white hover:border-[#4a9eff] transition-all duration-200 active:scale-95"
+                        title="放大视图"
+                      >
+                        🔍+
+                      </button>
+                      <button
+                        onClick={() => {
+                          // 缩小逻辑
+                          const zoomFactor = 1.25;
+                          const center = Math.floor((brushStartIndex + brushEndIndex) / 2);
+                          const range = brushEndIndex - brushStartIndex;
+                          const newRange = Math.min(Math.floor(range * zoomFactor), chartData.length - 1);
+                          const newStart = Math.max(0, center - Math.floor(newRange / 2));
+                          const newEnd = Math.min(chartData.length - 1, center + Math.floor(newRange / 2));
+                          setBrushStartIndex(newStart);
+                          setBrushEndIndex(newEnd);
+                        }}
+                        className="px-2 py-1 rounded text-xs bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#4a9eff] hover:text-white hover:border-[#4a9eff] transition-all duration-200 active:scale-95"
+                        title="缩小视图"
+                      >
+                        🔍-
+                      </button>
+                      <button
+                        onClick={() => {
+                          setBrushStartIndex(0);
+                          setBrushEndIndex(chartData.length - 1);
+                        }}
+                        className="px-2 py-1 rounded text-xs bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#4a9eff] hover:text-white hover:border-[#4a9eff] transition-all duration-200 active:scale-95"
+                        title="重置缩放"
+                      >
+                        🔄 重置
+                      </button>
+                    </div>
+
+                    {/* 中间：当前范围显示或提示 */}
+                    <div className="flex-1 flex items-center justify-center">
+                      <span className="text-xs text-[#888]">
+                        {chartData.length > 0 && (
+                          <span>
+                            显示: {format(new Date(chartData[brushStartIndex].date), 'yyyy-MM-dd')} ~ {format(new Date(chartData[brushEndIndex].date), 'yyyy-MM-dd')}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/* 定投记录表格 */}
               {investmentRecords.length > 0 && (
                 <div className="bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl border border-[#2a2a2a] shadow-2xl overflow-hidden flex flex-col flex-shrink-0 h-[200px] md:h-[200px]">
-                  <div className="px-3 md:px-4 py-2 border-b border-[#2a2a2a] flex-shrink-0">
-                    <h3 className="text-white text-sm font-bold">定投记录</h3>
+                  <div className="px-3 md:px-4 py-2 border-b border-[#2a2a2a] flex-shrink-0 flex items-center justify-between">
+                    <h3 className="text-white text-sm font-bold flex items-center gap-2">
+                      <span className="text-base">📋</span>
+                      定投记录
+                    </h3>
+                    {investmentRecords.length > 0 && (
+                      <button
+                        onClick={() => handleExportCSV(investmentRecords, fundCode)}
+                        className="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#4a9eff] hover:text-white hover:border-[#4a9eff] transition-all duration-200 active:scale-95 flex items-center gap-1"
+                        title="导出为CSV"
+                        aria-label="导出定投记录为CSV格式"
+                      >
+                        ⬇️ 导出
+                      </button>
+                    )}
                   </div>
                   <div className="overflow-x-auto overflow-y-auto flex-1 scroll-smooth" style={{ WebkitOverflowScrolling: 'touch' }}>
                     <table className="w-full min-w-[600px] md:min-w-full">
-                      <thead className="sticky top-0 z-10 bg-[#1a1a1a]">
+                      <thead className="sticky top-0 z-10 bg-[#1a1a1a] bg-gradient-to-b from-[#1f1f1f] to-[#1a1a1a]">
                         <tr className="border-b border-[#2a2a2a]">
                           <th className="px-3 md:px-4 py-2.5 md:py-2 text-left text-xs font-medium text-[#888] uppercase tracking-wider">日期</th>
                           <th className="px-3 md:px-4 py-2.5 md:py-2 text-left text-xs font-medium text-[#888] uppercase tracking-wider">类型</th>
@@ -828,5 +865,34 @@ export default function Home() {
       </div>
     </div>
   );
+}
+
+// 导出CSV函数
+function handleExportCSV(records: any[], fundCode: string) {
+  if (!records || records.length === 0) return;
+
+  const headers = ['日期', '类型', '单位净值', '金额', '份额'];
+  const csvContent = [
+    headers.join(','),
+    ...records.map(record => [
+      record.date,
+      record.type,
+      record.netValue.toFixed(4),
+      record.investmentAmount.toFixed(2),
+      record.shares.toFixed(2)
+    ].join(','))
+  ].join('\n');
+
+  const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+
+  link.setAttribute('href', url);
+  link.setAttribute('download', `定投记录_${fundCode}_${new Date().toISOString().split('T')[0]}.csv`);
+  link.style.visibility = 'hidden';
+
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }
 
