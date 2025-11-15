@@ -714,8 +714,8 @@ export default function Home() {
                 </div>
 
                 {/* 定投记录表格 */}
-              {investmentRecords.length > 0 && (
-                <div className="bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl border border-[#2a2a2a] shadow-2xl overflow-hidden flex flex-col">
+                {investmentRecords.length > 0 && (
+                  <div className="bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl border border-[#2a2a2a] shadow-2xl overflow-hidden flex flex-col">
                   <div className="px-4 py-2 border-b border-[#2a2a2a] flex-shrink-0 flex items-center justify-between">
                     <h3 className="text-white text-sm font-bold flex items-center gap-2">
                       <span className="text-base">📋</span>
@@ -806,8 +806,9 @@ export default function Home() {
                       </button>
                     </div>
                   </div>
-                </div>
-              )}
+                  </div>
+                )}
+              </div>
             </div>
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#0f0f0f] via-[#0a0a0a] to-[#0f0f0f]">
@@ -892,4 +893,3 @@ function handleExportCSV(records: any[], fundCode: string) {
   link.click();
   document.body.removeChild(link);
 }
-
