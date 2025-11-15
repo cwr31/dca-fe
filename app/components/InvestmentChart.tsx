@@ -437,8 +437,8 @@ export default function InvestmentChart({
         visible: true,
         borderColor: 'rgba(51, 51, 51, 0.3)',
         scaleMargins: {
-          top: 0.1,
-          bottom: 0.1,
+          top: 0.15,
+          bottom: 0.15,
         },
         ticksVisible: true,
         entireTextOnly: false, // 允许部分文本显示
@@ -448,7 +448,7 @@ export default function InvestmentChart({
       },
       timeScale: {
         borderColor: 'rgba(51, 51, 51, 0.3)',
-        timeVisible: false,
+        timeVisible: true,
         secondsVisible: false,
         tickMarkFormatter: (time: any) => {
           try {
