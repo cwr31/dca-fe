@@ -644,10 +644,9 @@ export default function Home() {
               <div className="flex flex-col gap-5 flex-1">
                 {/* 图表区域 - 无遮挡，全区域显示 */}
                 <div
-                  className="bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl p-0 border border-[#2a2a2a] shadow-2xl flex-1 flex flex-col"
+                  className="bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl border border-[#2a2a2a] shadow-2xl flex-1 flex flex-col"
                   style={{
-                    minHeight: '400px',
-                    overflow: 'hidden',
+                    minHeight: '450px',
                     position: 'relative'
                   }}
                 >
@@ -1163,8 +1162,8 @@ export default function Home() {
               ) : null}
 
               {/* 移动端图表区域 */}
-              <div className="bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl p-0 border border-[#2a2a2a] shadow-2xl overflow-hidden"
-                   style={{ minHeight: '500px', position: 'relative' }}>
+              <div className="bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl border border-[#2a2a2a] shadow-2xl"
+                   style={{ minHeight: '550px', position: 'relative' }}>
                 <div className="flex flex-col gap-3 px-3 py-2 border-b border-[#2a2a2a] bg-gradient-to-r from-[#1a1a1a] to-[#1f1f1f] flex-shrink-0">
                   <div className="flex items-center justify-between gap-2">
                     <h3 className="text-white text-sm font-semibold truncate flex-1">

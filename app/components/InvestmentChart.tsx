@@ -78,6 +78,7 @@ export default function InvestmentChart({
       return visibility;
     }
   });
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [selectionOverlay, setSelectionOverlay] = useState({
     visible: false,
     left: 0,
@@ -85,6 +86,43 @@ export default function InvestmentChart({
   });
 
   const seriesVisibility = externalSeriesVisibility ?? internalSeriesVisibility;
+
+  // 响应式图表尺寸计算
+  const calculateChartDimensions = useCallback(() => {
+    if (!chartContainerRef.current) return { width: 0, height: 0 };
+
+    const container = chartContainerRef.current;
+    const containerRect = container.getBoundingClientRect();
+
+    // 获取容器的实际可用空间
+    const availableWidth = containerRect.width;
+    const availableHeight = containerRect.height;
+
+    // 图表四周留出padding
+    const padding = {
+      top: 30,
+      right: 30,
+      bottom: 80, // 为X轴标签和图例留出更多空间
+      left: 20
+    };
+
+    // 计算图表实际绘制区域
+    const chartWidth = Math.max(availableWidth - padding.left - padding.right, 300);
+    const chartHeight = Math.max(availableHeight - padding.top - padding.bottom, 200);
+
+    return {
+      width: chartWidth,
+      height: chartHeight,
+      padding
+    };
+  }, []);
+
+  // 更新容器尺寸状态
+  const updateContainerSize = useCallback(() => {
+    const dimensions = calculateChartDimensions();
+    setContainerSize(dimensions);
+  }, [calculateChartDimensions]);
+
   const chartMinHeight = '420px';
   const chartMaxHeight = '420px';
 
@@ -399,10 +437,14 @@ export default function InvestmentChart({
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
+    // 计算并设置容器尺寸
+    const dimensions = calculateChartDimensions();
+    setContainerSize(dimensions);
+
     // 创建图表实例
     const chart = createChart(chartContainerRef.current, {
-      width: chartContainerRef.current.clientWidth,
-      height: chartContainerRef.current.clientHeight,
+      width: dimensions.width,
+      height: dimensions.height,
       layout: {
         background: { color: 'transparent' },
         textColor: '#e0e0e0',
@@ -438,7 +480,7 @@ export default function InvestmentChart({
         borderColor: 'rgba(51, 51, 51, 0.3)',
         scaleMargins: {
           top: 0.15,
-          bottom: 0.15,
+          bottom: 0.35, // 增加底部边距为X轴和图例留出更多空间
         },
         ticksVisible: true,
         entireTextOnly: false, // 允许部分文本显示
@@ -891,9 +933,14 @@ export default function InvestmentChart({
 
     const handleResize = () => {
       if (chartRef.current && chartContainerRef.current) {
+        // 重新计算尺寸
+        const dimensions = calculateChartDimensions();
+        setContainerSize(dimensions);
+
+        // 应用新的尺寸设置
         chartRef.current.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-          height: chartContainerRef.current.clientHeight,
+          width: dimensions.width,
+          height: dimensions.height,
         });
       }
     };
@@ -904,7 +951,7 @@ export default function InvestmentChart({
     return () => {
       resizeObserver.disconnect();
     };
-  }, []);
+  }, [calculateChartDimensions]);
 
   useEffect(() => {
     const container = chartContainerRef.current;
@@ -1018,18 +1065,15 @@ export default function InvestmentChart({
     <div
     className="w-full relative"
       style={{
-        minHeight: chartMinHeight,
-        maxHeight: chartMaxHeight,
-        height: chartMaxHeight,
+        minHeight: '420px',
+        height: '100%'
       }}
     >
       <div
         ref={chartContainerRef}
         className="w-full h-full"
         style={{
-          minHeight: chartMinHeight,
-          maxHeight: chartMaxHeight,
-          height: '100%'
+          padding: '25px', // 四周添加padding
         }}
         onDoubleClick={() => {
           if (isChartReady) {
