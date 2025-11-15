@@ -103,8 +103,8 @@ export async function POST(request: NextRequest) {
       investmentRecords.push(...multiFundData.records);
     }
 
-    // 计算统计信息
-    const stats = calculateStats(results, mode);
+    // 计算统计信息，传入基金代码用于标识
+    const stats = calculateStats(results, mode, funds.map(f => f.code), investmentAmount);
 
     return NextResponse.json({
       success: true,
@@ -275,15 +275,15 @@ function calculateMultiFundBacktest(
   return { data, records };
 }
 
-function calculateStats(results: BacktestResult[], mode: string) {
+function calculateStats(results: BacktestResult[], mode: string, fundCodes: string[], investmentAmount?: number) {
   if (results.length === 0) return {};
 
   const lastResult = results[results.length - 1];
 
-  const totalInvestment = lastResult.totalInvestment || 0;
-  const currentValue = lastResult.currentValue || 0;
-
   if (mode === 'single') {
+    const totalInvestment = lastResult.totalInvestment || 0;
+    const currentValue = lastResult.currentValue || 0;
+
     return {
       totalInvestment,
       currentValue,
@@ -294,39 +294,68 @@ function calculateStats(results: BacktestResult[], mode: string) {
     };
   } else {
     // 多基金模式的统计信息
-    const stats: any = {};
+    const stats: any = {
+      funds: []
+    };
 
     // 根据模式计算不同的统计信息
     if (mode === 'multi-dca') {
       // 多基金定投统计
       const fundCount = Object.keys(lastResult).filter(key => key.includes('currentValue')).length;
-      let totalValue = 0;
-      let totalInvestment = 0;
 
       for (let i = 1; i <= fundCount; i++) {
         const currentValue = lastResult[`fund${i}_currentValue`] || 0;
-        const investment = lastResult[`fund${i}_totalInvestment`] || 0;
-        totalValue += currentValue;
-        totalInvestment += investment;
+        const totalInvestment = lastResult[`fund${i}_totalInvestment`] || 0;
+        const returnRate = lastResult[`fund${i}_return`] || 0;
+
+        const profitRate = totalInvestment > 0 ? ((currentValue - totalInvestment) / totalInvestment) * 100 : 0;
+
+        stats.funds.push({
+          code: fundCodes[i - 1] || `基金${i}`,
+          totalInvestment,
+          finalAssetValue: currentValue,
+          profitRate,
+          annualizedReturn: returnRate
+        });
       }
 
+      // 计算总计数据
+      const totalInvestment = stats.funds.reduce((sum: number, fund: any) => sum + fund.totalInvestment, 0);
+      const totalFinalValue = stats.funds.reduce((sum: number, fund: any) => sum + fund.finalAssetValue, 0);
+
       stats.totalInvestment = totalInvestment;
-      stats.currentValue = totalValue;
-      stats.profitRate = totalInvestment > 0 ? ((totalValue - totalInvestment) / totalInvestment) * 100 : 0;
+      stats.totalFinalValue = totalFinalValue;
+      stats.averageReturn = stats.funds.length > 0
+        ? stats.funds.reduce((sum: number, fund: any) => sum + fund.profitRate, 0) / stats.funds.length
+        : 0;
+
     } else if (mode === 'multi-lumpsum') {
       // 多基金一次性投入统计
       const fundCount = Object.keys(lastResult).filter(key => key.includes('lumpSum')).length / 2; // 除以2因为每个基金有lumpSum和lumpSumReturn
-      let totalValue = 0;
-      const totalInvestment = fundCount * 100; // 假设每个基金投资100元
+      const lumpSumInvestmentAmount = investmentAmount || 100; // 使用传入的投资金额
 
       for (let i = 1; i <= fundCount; i++) {
         const lumpSumValue = lastResult[`fund${i}_lumpSum`] || 0;
-        totalValue += lumpSumValue;
+        const lumpSumReturn = lastResult[`fund${i}_lumpSumReturn`] || 0;
+
+        stats.funds.push({
+          code: fundCodes[i - 1] || `基金${i}`,
+          totalInvestment: lumpSumInvestmentAmount,
+          finalAssetValue: lumpSumValue,
+          profitRate: lumpSumReturn,
+          annualizedReturn: 0 // 年化收益率需要根据时间计算
+        });
       }
 
+      // 计算总计数据
+      const totalInvestment = fundCount * lumpSumInvestmentAmount;
+      const totalFinalValue = stats.funds.reduce((sum: number, fund: any) => sum + fund.finalAssetValue, 0);
+
       stats.totalInvestment = totalInvestment;
-      stats.currentValue = totalValue;
-      stats.profitRate = totalInvestment > 0 ? ((totalValue - totalInvestment) / totalInvestment) * 100 : 0;
+      stats.totalFinalValue = totalFinalValue;
+      stats.averageReturn = stats.funds.length > 0
+        ? stats.funds.reduce((sum: number, fund: any) => sum + fund.profitRate, 0) / stats.funds.length
+        : 0;
     }
 
     return stats;

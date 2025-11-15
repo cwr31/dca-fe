@@ -15,6 +15,11 @@ const StatsCards = dynamic(() => import('./components/StatsCards').then((mod) =>
   loading: () => <div className="w-full h-full flex items-center justify-center"><div className="text-sm text-[#666]">加载统计卡片...</div></div>
 });
 
+const MultiFundStatsCards = dynamic(() => import('./components/MultiFundStatsCards').then((mod) => ({ default: mod.MultiFundStatsCards })), {
+  ssr: false,
+  loading: () => <div className="w-full h-full flex items-center justify-center"><div className="text-sm text-[#666]">加载统计卡片...</div></div>
+});
+
 const StatsSkeleton = dynamic(() => import('./components/Skeleton').then((mod) => ({ default: mod.StatsSkeleton })), {
   ssr: false
 });
@@ -678,30 +683,38 @@ export default function Home() {
         <div className="flex-1 bg-gradient-to-br from-[#0f0f0f] via-[#0a0a0a] to-[#0f0f0f] flex flex-col relative">
           {chartData.length > 0 ? (
             <div className="w-full flex flex-col p-2 md:p-5 gap-4 md:gap-6 animate-in fade-in duration-500">
-              {/* 回测统计 - 新布局：4组对比卡片 */}
+              {/* 回测统计 - 根据模式显示不同的统计卡片 */}
               {stats ? (
-                <StatsCards stats={(() => {
-                  const statsData = {
-                    totalPeriods: investmentRecords.length,
-                    totalInvestment: stats.totalInvestment,
-                    averageInvestment: stats.totalInvestment / (investmentRecords.length || 1),
-                    finalAssetValue: stats.currentValue,
-                    dcaProfitRate: stats.profitRate,
-                    dcaAnnualizedReturn: stats.annualizedReturnRate || 0,
-                    lumpSumFinalAsset: stats.totalInvestment * (1 + stats.priceChangePercent / 100),
-                    lumpSumProfitRate: stats.priceChangePercent,
-                    lumpSumAnnualizedReturn: (() => {
-                      const daysDiff = stats.startDate && chartData.length > 0
-                        ? Math.ceil((new Date(chartData[chartData.length - 1].date).getTime() - new Date(stats.startDate).getTime()) / (1000 * 60 * 60 * 24))
-                        : 365;
-                      return daysDiff > 0
-                        ? ((Math.pow(1 + stats.priceChangePercent / 100, 365 / daysDiff) - 1) * 100)
-                        : 0;
-                    })()
-                  };
+                mode === 'single' ? (
+                  <StatsCards stats={(() => {
+                    const statsData = {
+                      totalPeriods: investmentRecords.length,
+                      totalInvestment: stats.totalInvestment,
+                      averageInvestment: stats.totalInvestment / (investmentRecords.length || 1),
+                      finalAssetValue: stats.currentValue,
+                      dcaProfitRate: stats.profitRate,
+                      dcaAnnualizedReturn: stats.annualizedReturnRate || 0,
+                      lumpSumFinalAsset: stats.totalInvestment * (1 + stats.priceChangePercent / 100),
+                      lumpSumProfitRate: stats.priceChangePercent,
+                      lumpSumAnnualizedReturn: (() => {
+                        const daysDiff = stats.startDate && chartData.length > 0
+                          ? Math.ceil((new Date(chartData[chartData.length - 1].date).getTime() - new Date(stats.startDate).getTime()) / (1000 * 60 * 60 * 24))
+                          : 365;
+                        return daysDiff > 0
+                          ? ((Math.pow(1 + stats.priceChangePercent / 100, 365 / daysDiff) - 1) * 100)
+                          : 0;
+                      })()
+                    };
 
-                  return statsData;
-                })()} startDate={stats.startDate} endDate={chartData.length > 0 ? chartData[chartData.length - 1].date : undefined} />
+                    return statsData;
+                  })()} startDate={stats.startDate} endDate={chartData.length > 0 ? chartData[chartData.length - 1].date : undefined} />
+                ) : (
+                  <MultiFundStatsCards
+                    stats={stats}
+                    mode={mode as 'multi-dca' | 'multi-lumpsum'}
+                    funds={funds.filter(f => f.code.trim())}
+                  />
+                )
               ) : chartData.length > 0 ? (
                 // 如果chartData有数据但stats还在加载，显示骨架屏
                 <StatsSkeleton count={4} />
