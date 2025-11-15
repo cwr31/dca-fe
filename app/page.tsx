@@ -601,7 +601,7 @@ export default function Home() {
         </div>
 
         {/* 右侧图表展示区域 */}
-        <div className="flex-1 bg-gradient-to-br from-[#0f0f0f] via-[#0a0a0a] to-[#0f0f0f] flex flex-col relative min-w-0 overflow-hidden">
+        <div className="flex-1 bg-gradient-to-br from-[#0f0f0f] via-[#0a0a0a] to-[#0f0f0f] flex flex-col relative min-w-0">
           {chartData.length > 0 ? (
             <div className="w-full flex flex-col p-5 gap-6 animate-in fade-in duration-500">
               {/* 回测统计 - 根据模式显示不同的统计卡片 */}
@@ -645,8 +645,8 @@ export default function Home() {
                 <div
                   className="bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl p-0 border border-[#2a2a2a] shadow-2xl"
                   style={{
-                    minHeight: '400px',
-                    height: 'auto',
+                    height: 'calc(100vh - 400px)',
+                    maxHeight: '600px',
                     overflow: 'hidden',
                     position: 'relative'
                   }}
@@ -726,8 +726,8 @@ export default function Home() {
 
                 {/* 定投记录表格 */}
                 {investmentRecords.length > 0 && (
-                  <div className="bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl border border-[#2a2a2a] shadow-2xl overflow-hidden flex flex-col">
-                  <div className="px-4 py-2 border-b border-[#2a2a2a] flex-shrink-0 flex items-center justify-between">
+                  <div className="bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl border border-[#2a2a2a] shadow-2xl overflow-hidden">
+                  <div className="px-4 py-2 border-b border-[#2a2a2a] flex items-center justify-between">
                     <h3 className="text-white text-sm font-bold flex items-center gap-2">
                       <span className="text-base">📋</span>
                       定投记录
