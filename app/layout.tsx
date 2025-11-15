@@ -10,6 +10,8 @@ export const metadata: Metadata = {
     title: '定投回测',
   },
   formatDetection: {
+    email: false,
+    address: false,
     telephone: false,
   },
 }

@@ -13,7 +13,7 @@ export function Skeleton({ className = '' }: SkeletonProps) {
 // 卡片骨架屏
 export function StatsCardSkeleton() {
   return (
-    <div className="bg-[#1c1c1c]/90 rounded-lg border border-[#2a2a2a] p-4 md:p-5">
+    <div className="bg-[#1c1c1c]/90 rounded-lg border border-[#2a2a2a] p-4">
       <div className="flex items-start gap-3">
         {/* 图标骨架 */}
         <Skeleton className="w-8 h-8 rounded-full" />
@@ -36,7 +36,7 @@ export function TableSkeleton() {
   return (
     <div className="w-full h-full flex flex-col">
       {/* 表头 */}
-      <div className="px-3 md:px-4 py-2 border-b border-[#2a2a2a]">
+      <div className="px-3 px-4 py-2 border-b border-[#2a2a2a]">
         <Skeleton className="w-24 h-4" />
       </div>
 
@@ -87,7 +87,7 @@ interface StatsSkeletonProps {
 export function StatsSkeleton({ count = 4 }: StatsSkeletonProps) {
   return (
     <div className="animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
         {[...Array(count)].map((_, i) => (
           <StatsCardSkeleton key={i} />
         ))}

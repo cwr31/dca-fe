@@ -65,7 +65,7 @@ export function MultiFundStatsCards({ stats, mode, funds }: MultiFundStatsCardsP
     : 0;
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
+    <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
       {/* 卡片1: 基金数量概况 */}
       <StatsCard
         icon={mode === 'multi-dca' ? '📈' : '💹'}

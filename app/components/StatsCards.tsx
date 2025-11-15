@@ -100,13 +100,8 @@ export function StatsCards({ stats, startDate, endDate }: StatsCardsProps) {
 
   return (
     <div className="stats-grid-container">
-      {/* 移动端横向滚动提示 */}
-      <div className="md:hidden flex items-center justify-end mb-2 text-xs text-[#666]">
-        <span className="animate-pulse">← 滑动查看更多 →</span>
-      </div>
-
-      {/* 桌面端网格布局 */}
-      <div className="hidden md:grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
+      {/* 网格布局 */}
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
         {/* 卡片1: 定投执行概况 */}
         <StatsCard
           icon="💰"
@@ -180,64 +175,6 @@ export function StatsCards({ stats, startDate, endDate }: StatsCardsProps) {
           accentColor="#00CED1"
           trend={stats.dcaAnnualizedReturn >= stats.lumpSumAnnualizedReturn ? 'positive' : 'negative'}
         />
-      </div>
-
-      {/* 移动端横向滚动布局 */}
-      <div className="md:hidden mobile-stats-scroll">
-        <div className="flex gap-3 overflow-x-auto pb-2 scroll-snap-type-x-mandatory">
-          {/* 移动端卡片 - 紧凑版本 */}
-          <div className="flex-shrink-0 w-[calc(85vw-1.5rem)] scroll-snap-align-start">
-            <StatsCard
-              icon="💰"
-              title="定投概况"
-              value={`¥${Number(stats.totalInvestment.toFixed(2)).toLocaleString('zh-CN')}`}
-              subtitle={`${stats.totalPeriods}期 × ¥${stats.averageInvestment.toLocaleString('zh-CN')}`}
-              subValue={`总投入 ${stats.totalPeriods}期`}
-              accentColor="#FFD700"
-              trend="neutral"
-              className="h-[120px]"
-            />
-          </div>
-
-          <div className="flex-shrink-0 w-[calc(85vw-1.5rem)] scroll-snap-align-start">
-            <StatsCard
-              icon="📈"
-              title="收益率对比"
-              value={`${stats.dcaProfitRate >= 0 ? '+' : ''}${stats.dcaProfitRate.toFixed(2)}%`}
-              subtitle={`一次性：${stats.lumpSumProfitRate >= 0 ? '+' : ''}${stats.lumpSumProfitRate.toFixed(2)}%`}
-              subValue={winnerText}
-              accentColor="#4a9eff"
-              trend={dcaIsBetter ? 'positive' : 'negative'}
-              className="h-[120px]"
-            />
-          </div>
-
-          <div className="flex-shrink-0 w-[calc(85vw-1.5rem)] scroll-snap-align-start">
-            <StatsCard
-              icon="💼"
-              title="资产对比"
-              value={`¥${Number(stats.finalAssetValue.toFixed(0)).toLocaleString('zh-CN')}`}
-              subtitle={`一次性：¥${Number(stats.lumpSumFinalAsset.toFixed(0)).toLocaleString('zh-CN')}`}
-              subValue={`差额 ¥${Number(assetDiff).toLocaleString('zh-CN')}`}
-              accentColor="#FF6BFF"
-              trend={dcaIsBetter ? 'positive' : 'negative'}
-              className="h-[120px]"
-            />
-          </div>
-
-          <div className="flex-shrink-0 w-[calc(85vw-1.5rem)] scroll-snap-align-start">
-            <StatsCard
-              icon="⚡"
-              title="年化收益"
-              value={`${stats.dcaAnnualizedReturn >= 0 ? '+' : ''}${stats.dcaAnnualizedReturn.toFixed(2)}%`}
-              subtitle={`一次性：${stats.lumpSumAnnualizedReturn >= 0 ? '+' : ''}${stats.lumpSumAnnualizedReturn.toFixed(2)}%`}
-              subValue={`差值 ${Math.abs(stats.dcaAnnualizedReturn - stats.lumpSumAnnualizedReturn).toFixed(2)}%`}
-              accentColor="#00CED1"
-              trend={stats.dcaAnnualizedReturn >= stats.lumpSumAnnualizedReturn ? 'positive' : 'negative'}
-              className="h-[120px]"
-            />
-          </div>
-        </div>
       </div>
     </div>
   );

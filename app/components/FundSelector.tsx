@@ -119,7 +119,7 @@ export default function FundSelector({ mode, onModeChange, funds, onFundsChange 
             value={funds[0]?.code || ''}
             onChange={(e) => handleFundCodeChange(funds[0]?.id || '1', e.target.value)}
             placeholder="例如：000001"
-            className="w-full px-4 py-3 md:py-2.5 border border-[#3a3a3a] rounded-lg text-base md:text-sm transition-all duration-200 bg-[#252525] text-[#e0e0e0] placeholder:text-[#666] focus:outline-none focus:border-[#4a9eff] focus:bg-[#2a2a2a] focus:shadow-[0_0_0_3px_rgba(74,158,255,0.1)] hover:border-[#4a4a4a] touch-manipulation"
+            className="w-full px-4 py-2.5 border border-[#3a3a3a] rounded-lg text-base text-sm transition-all duration-200 bg-[#252525] text-[#e0e0e0] placeholder:text-[#666] focus:outline-none focus:border-[#4a9eff] focus:bg-[#2a2a2a] focus:shadow-[0_0_0_3px_rgba(74,158,255,0.1)] hover:border-[#4a4a4a]"
             inputMode="numeric"
           />
         </div>

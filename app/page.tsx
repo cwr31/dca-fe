@@ -101,8 +101,6 @@ export default function Home() {
   const [chartView, setChartView] = useState<'cost' | 'return'>('cost'); // 图表视图：cost=成本收益视图, return=年化收益率视图
   const [brushStartIndex, setBrushStartIndex] = useState<number>(0);
   const [brushEndIndex, setBrushEndIndex] = useState<number>(0);
-  const [isMobile, setIsMobile] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false); // 移动端侧边栏开关
   const [recordsPage, setRecordsPage] = useState(1);
   const recordsPerPage = 10;
 
@@ -123,34 +121,6 @@ export default function Home() {
   }, [investmentRecords, recordsPage, recordsPerPage]);
 
   const totalRecordPages = Math.max(1, Math.ceil(Math.max(investmentRecords.length, 1) / recordsPerPage));
-
-  // 检测移动端（使用防抖优化性能）
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-      // 在桌面端默认打开侧边栏，移动端默认关闭
-      if (window.innerWidth >= 768) {
-        setSidebarOpen(true);
-      } else {
-        setSidebarOpen(false);
-      }
-    };
-    
-    checkMobile();
-    
-    // 防抖处理 resize 事件
-    let timeoutId: NodeJS.Timeout;
-    const handleResize = () => {
-      clearTimeout(timeoutId);
-      timeoutId = setTimeout(checkMobile, 150);
-    };
-    
-    window.addEventListener('resize', handleResize, { passive: true });
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      clearTimeout(timeoutId);
-    };
-  }, []);
 
   // 设置结束日期默认为今天
   useEffect(() => {
@@ -399,61 +369,11 @@ export default function Home() {
   return (
     <div className="w-full min-h-screen bg-gradient-to-br from-[#0a0a0a] via-[#0f0f0f] to-[#0a0a0a]">
       <div className="flex min-h-screen w-full relative">
-        {/* 移动端菜单按钮 */}
-        {isMobile && (
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="fixed top-4 left-4 z-50 p-3 bg-[#252525] border border-[#3a3a3a] rounded-lg text-white hover:bg-[#2a2a2a] active:bg-[#1a1a1a] active:scale-95 transition-all duration-200 shadow-lg touch-manipulation"
-            aria-label="切换菜单"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-        )}
-
-        {/* 移动端遮罩层 */}
-        {isMobile && sidebarOpen && (
-          <div
-            className="fixed inset-0 bg-black/60 z-40 md:hidden"
-            onClick={() => setSidebarOpen(false)}
-          />
-        )}
-
         {/* 左侧参数设置面板 */}
         <div
-          className={`
-            ${isMobile ? 'fixed' : 'relative'} 
-            ${isMobile ? (sidebarOpen ? 'translate-x-0' : '-translate-x-full') : ''}
-            ${isMobile ? 'z-50' : ''}
-            w-full md:w-[340px] md:min-w-[340px]
-            h-full
-            bg-gradient-to-b from-[#1a1a1a] to-[#151515] 
-            border-r border-[#2a2a2a] 
-            flex flex-col 
-            overflow-y-auto overflow-x-hidden 
-            custom-scrollbar 
-            shadow-2xl
-            transition-transform duration-300 ease-in-out
-            ${isMobile ? 'max-w-[85vw] sm:max-w-[340px]' : ''}
-          `}
+          className="w-[340px] min-w-[340px] h-full bg-gradient-to-b from-[#1a1a1a] to-[#151515] border-r border-[#2a2a2a] flex flex-col overflow-y-auto overflow-x-hidden custom-scrollbar shadow-2xl"
         >
-          <div className="px-4 sm:px-5 py-4 flex-1 space-y-4">
-            {/* 移动端关闭按钮 */}
-            {isMobile && (
-              <div className="flex items-center justify-between mb-4 pb-4 border-b border-[#2a2a2a]">
-                <h2 className="text-white text-lg font-bold">参数设置</h2>
-                <button
-                  onClick={() => setSidebarOpen(false)}
-                  className="p-2 text-[#b0b0b0] hover:text-white hover:bg-[#2a2a2a] rounded-lg transition-all duration-200"
-                  aria-label="关闭菜单"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            )}
+          <div className="px-4 py-4 flex-1 space-y-4">
 
             <div className="group">
               <label htmlFor="fundCode" className="block mb-2 text-[#b0b0b0] font-medium text-sm flex items-center gap-2">
@@ -480,10 +400,9 @@ export default function Home() {
                 onChange={(e) => setInvestmentAmount(e.target.value)}
                 min="1"
                 step="0.01"
-                className="w-full px-4 py-3 md:py-2.5 border border-[#3a3a3a] rounded-lg text-base md:text-sm transition-all duration-200 bg-[#252525] text-[#e0e0e0] placeholder:text-[#666] focus:outline-none focus:border-[#4a9eff] focus:bg-[#2a2a2a] focus:shadow-[0_0_0_3px_rgba(74,158,255,0.1)] hover:border-[#4a4a4a] touch-manipulation"
+                className="w-full px-4 py-3 border border-[#3a3a3a] rounded-lg text-sm transition-all duration-200 bg-[#252525] text-[#e0e0e0] placeholder:text-[#666] focus:outline-none focus:border-[#4a9eff] focus:bg-[#2a2a2a] focus:shadow-[0_0_0_3px_rgba(74,158,255,0.1)] hover:border-[#4a4a4a]"
                 tabIndex={0}
                 aria-label="每次投资金额输入框"
-                inputMode="decimal"
               />
             </div>
 
@@ -496,7 +415,7 @@ export default function Home() {
                 id="frequency"
                 value={frequency}
                 onChange={(e) => setFrequency(e.target.value as 'daily' | 'weekly' | 'monthly')}
-                className="w-full px-4 py-3 md:py-2.5 border border-[#3a3a3a] rounded-lg text-base md:text-sm transition-all duration-200 bg-[#252525] text-[#e0e0e0] focus:outline-none focus:border-[#4a9eff] focus:bg-[#2a2a2a] focus:shadow-[0_0_0_3px_rgba(74,158,255,0.1)] hover:border-[#4a4a4a] cursor-pointer touch-manipulation"
+                className="w-full px-4 py-3 border border-[#3a3a3a] rounded-lg text-sm transition-all duration-200 bg-[#252525] text-[#e0e0e0] focus:outline-none focus:border-[#4a9eff] focus:bg-[#2a2a2a] focus:shadow-[0_0_0_3px_rgba(74,158,255,0.1)] hover:border-[#4a4a4a] cursor-pointer"
                 tabIndex={0}
                 aria-label="定投频率选择"
               >
@@ -516,7 +435,7 @@ export default function Home() {
                   id="weeklyDayOfWeek"
                   value={weeklyDayOfWeek}
                   onChange={(e) => setWeeklyDayOfWeek(parseInt(e.target.value))}
-                  className="w-full px-4 py-3 md:py-2.5 border border-[#3a3a3a] rounded-lg text-base md:text-sm transition-all duration-200 bg-[#252525] text-[#e0e0e0] focus:outline-none focus:border-[#4a9eff] focus:bg-[#2a2a2a] focus:shadow-[0_0_0_3px_rgba(74,158,255,0.1)] hover:border-[#4a4a4a] cursor-pointer touch-manipulation"
+                  className="w-full px-4 py-3 border border-[#3a3a3a] rounded-lg text-sm transition-all duration-200 bg-[#252525] text-[#e0e0e0] focus:outline-none focus:border-[#4a9eff] focus:bg-[#2a2a2a] focus:shadow-[0_0_0_3px_rgba(74,158,255,0.1)] hover:border-[#4a4a4a] cursor-pointer"
                   tabIndex={0}
                   aria-label="每周定投日期选择"
                 >
@@ -547,7 +466,7 @@ export default function Home() {
                       handleQuickDateSelect(1);
                     }
                   }}
-                  className="w-full px-3 py-2.5 md:py-2 text-sm md:text-xs font-medium rounded-lg bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#2a2a2a] hover:border-[#4a9eff] hover:text-[#4a9eff] active:bg-[#2a2a2a] active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#4a9eff]/50 touch-manipulation"
+                  className="w-full px-3 py-2 text-xs font-medium rounded-lg bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#2a2a2a] hover:border-[#4a9eff] hover:text-[#4a9eff] active:bg-[#2a2a2a] active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#4a9eff]/50"
                   tabIndex={0}
                   aria-label="选择近一年"
                 >
@@ -562,7 +481,7 @@ export default function Home() {
                       handleQuickDateSelect(3);
                     }
                   }}
-                  className="w-full px-3 py-2.5 md:py-2 text-sm md:text-xs font-medium rounded-lg bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#2a2a2a] hover:border-[#4a9eff] hover:text-[#4a9eff] active:bg-[#2a2a2a] active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#4a9eff]/50 touch-manipulation"
+                  className="w-full px-3 py-2 text-xs font-medium rounded-lg bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#2a2a2a] hover:border-[#4a9eff] hover:text-[#4a9eff] active:bg-[#2a2a2a] active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#4a9eff]/50"
                   tabIndex={0}
                   aria-label="选择近3年"
                 >
@@ -577,7 +496,7 @@ export default function Home() {
                       handleQuickDateSelect(5);
                     }
                   }}
-                  className="w-full px-3 py-2.5 md:py-2 text-sm md:text-xs font-medium rounded-lg bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#2a2a2a] hover:border-[#4a9eff] hover:text-[#4a9eff] active:bg-[#2a2a2a] active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#4a9eff]/50 touch-manipulation"
+                  className="w-full px-3 py-2 text-xs font-medium rounded-lg bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#2a2a2a] hover:border-[#4a9eff] hover:text-[#4a9eff] active:bg-[#2a2a2a] active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#4a9eff]/50"
                   tabIndex={0}
                   aria-label="选择近5年"
                 >
@@ -592,7 +511,7 @@ export default function Home() {
                       handleQuickDateSelect(10);
                     }
                   }}
-                  className="w-full px-3 py-2.5 md:py-2 text-sm md:text-xs font-medium rounded-lg bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#2a2a2a] hover:border-[#4a9eff] hover:text-[#4a9eff] active:bg-[#2a2a2a] active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#4a9eff]/50 touch-manipulation"
+                  className="w-full px-3 py-2 text-xs font-medium rounded-lg bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#2a2a2a] hover:border-[#4a9eff] hover:text-[#4a9eff] active:bg-[#2a2a2a] active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#4a9eff]/50"
                   tabIndex={0}
                   aria-label="选择近10年"
                 >
@@ -605,16 +524,10 @@ export default function Home() {
                 value={startDateInput}
                 onChange={(e) => setStartDateInput(e.target.value)}
                 placeholder="例如：20200101 或 2020-01-01"
-                className={`w-full px-4 py-3 md:py-2.5 border border-[#3a3a3a] rounded-lg transition-all duration-200 bg-[#252525] text-[#e0e0e0] placeholder:text-[#666] focus:outline-none focus:border-[#4a9eff] focus:bg-[#2a2a2a] focus:shadow-[0_0_0_3px_rgba(74,158,255,0.1)] hover:border-[#4a4a4a] ${
-                  isMobile
-                    ? 'text-base touch-manipulation focus:scale-[1.02] active:scale-[0.98]'
-                    : 'text-sm'
-                }`}
+                className="w-full px-4 py-3 border border-[#3a3a3a] rounded-lg transition-all duration-200 bg-[#252525] text-[#e0e0e0] placeholder:text-[#666] focus:outline-none focus:border-[#4a9eff] focus:bg-[#2a2a2a] focus:shadow-[0_0_0_3px_rgba(74,158,255,0.1)] hover:border-[#4a4a4a]"
                 tabIndex={0}
                 aria-label="开始日期输入框"
                 required
-                inputMode="numeric"
-                pattern="[0-9]*"
               />
             </div>
 
@@ -629,41 +542,24 @@ export default function Home() {
                 value={endDateInput}
                 onChange={(e) => setEndDateInput(e.target.value)}
                 placeholder="例如：20241231 或 2024-12-31"
-                className={`w-full px-4 py-3 md:py-2.5 border border-[#3a3a3a] rounded-lg transition-all duration-200 bg-[#252525] text-[#e0e0e0] placeholder:text-[#666] focus:outline-none focus:border-[#4a9eff] focus:bg-[#2a2a2a] focus:shadow-[0_0_0_3px_rgba(74,158,255,0.1)] hover:border-[#4a4a4a] ${
-                  isMobile
-                    ? 'text-base touch-manipulation focus:scale-[1.02] active:scale-[0.98]'
-                    : 'text-sm'
-                }`}
+                className="w-full px-4 py-3 border border-[#3a3a3a] rounded-lg transition-all duration-200 bg-[#252525] text-[#e0e0e0] placeholder:text-[#666] focus:outline-none focus:border-[#4a9eff] focus:bg-[#2a2a2a] focus:shadow-[0_0_0_3px_rgba(74,158,255,0.1)] hover:border-[#4a4a4a]"
                 tabIndex={0}
                 aria-label="结束日期输入框"
-                inputMode="numeric"
-                pattern="[0-9]*"
               />
             </div>
 
             <button
               onClick={async () => {
                 await handleBacktest();
-                // 移动端提交后自动关闭侧边栏
-                if (isMobile) {
-                  setTimeout(() => setSidebarOpen(false), 300);
-                }
               }}
               onKeyDown={async (e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
                   await handleBacktest();
-                  if (isMobile) {
-                    setTimeout(() => setSidebarOpen(false), 300);
-                  }
                 }
               }}
               disabled={loading}
-              className={`w-full bg-gradient-to-r from-[#4a9eff] via-[#3a8eef] to-[#0066cc] text-white font-semibold cursor-pointer transition-all duration-200 mt-2 hover:translate-y-[-2px] hover:shadow-[0_8px_20px_rgba(74,158,255,0.4)] hover:from-[#5aaeff] hover:to-[#0076dc] active:translate-y-0 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:hover:shadow-none relative overflow-hidden group touch-manipulation ${
-                isMobile
-                  ? 'px-6 py-4 text-base min-h-[56px]'
-                  : 'px-6 py-3 text-[15px]'
-              }`}
+              className="w-full bg-gradient-to-r from-[#4a9eff] via-[#3a8eef] to-[#0066cc] text-white font-semibold cursor-pointer transition-all duration-200 mt-2 hover:translate-y-[-2px] hover:shadow-[0_8px_20px_rgba(74,158,255,0.4)] hover:from-[#5aaeff] hover:to-[#0076dc] active:translate-y-0 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:hover:shadow-none relative overflow-hidden group"
               tabIndex={0}
               aria-label="开始回测按钮"
             >
@@ -684,11 +580,7 @@ export default function Home() {
             </button>
 
             {error && (
-              <div className={`mt-4 bg-gradient-to-r from-[rgba(255,77,77,0.15)] to-[rgba(255,77,77,0.1)] text-[#ff6b6b] px-4 py-3 rounded-lg border border-[rgba(255,77,77,0.3)] text-sm flex items-start gap-2 animate-in fade-in slide-in-from-top-2 duration-300 shadow-lg ${
-                isMobile
-                  ? 'py-2.5 px-3 text-xs min-h-[44px] touch-manipulation'
-                  : 'py-3 px-4 text-sm'
-              }`}>
+              <div className="mt-4 bg-gradient-to-r from-[rgba(255,77,77,0.15)] to-[rgba(255,77,77,0.1)] text-[#ff6b6b] px-4 py-3 rounded-lg border border-[rgba(255,77,77,0.3)] text-sm flex items-start gap-2 animate-in fade-in slide-in-from-top-2 duration-300 shadow-lg">
                 <span className="text-lg flex-shrink-0">⚠️</span>
                 <span className="flex-1">{error}</span>
               </div>
@@ -700,7 +592,7 @@ export default function Home() {
         {/* 右侧图表展示区域 */}
         <div className="flex-1 bg-gradient-to-br from-[#0f0f0f] via-[#0a0a0a] to-[#0f0f0f] flex flex-col relative">
           {chartData.length > 0 ? (
-            <div className="w-full flex flex-col p-2 md:p-5 gap-4 md:gap-6 animate-in fade-in duration-500">
+            <div className="w-full flex flex-col p-5 gap-6 animate-in fade-in duration-500">
               {/* 回测统计 - 根据模式显示不同的统计卡片 */}
               {stats ? (
                 mode === 'single' ? (
@@ -737,22 +629,21 @@ export default function Home() {
                 // 如果chartData有数据但stats还在加载，显示骨架屏
                 <StatsSkeleton count={4} />
               ) : null}
-              <div className="flex flex-col gap-4 md:gap-5">
+              <div className="flex flex-col gap-5">
                 {/* 图表区域 - 无遮挡，全区域显示 */}
                 <div
                   className="bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl p-0 border border-[#2a2a2a] shadow-2xl"
                   style={{
-                    minHeight: isMobile ? '320px' : '400px',
-                    maxHeight: isMobile ? '55vh' : 'none', // 移动端限制最大高度
-                    height: isMobile ? '55vh' : 'auto', // 移动端固定高度
-                    overflow: 'hidden', // 防止内容溢出
+                    minHeight: '400px',
+                    height: 'auto',
+                    overflow: 'hidden',
                     position: 'relative'
                   }}
                 >
-                  <div className="flex flex-col gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 border-b border-[#2a2a2a] bg-gradient-to-r from-[#1a1a1a] to-[#1f1f1f] flex-shrink-0">
-                    <div className="flex flex-col gap-2 md:gap-3">
-                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-                        <h3 className="text-white text-sm md:text-base font-semibold truncate flex-1">
+                  <div className="flex flex-col gap-3 px-4 py-3 border-b border-[#2a2a2a] bg-gradient-to-r from-[#1a1a1a] to-[#1f1f1f] flex-shrink-0">
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 className="text-white text-base font-semibold truncate flex-1">
                           {mode === 'single'
                             ? (chartView === 'cost' ? '收益表' : '收益率表')
                             : (mode === 'multi-dca'
@@ -762,7 +653,7 @@ export default function Home() {
                           }
                         </h3>
                         {chartData.length > 0 && brushEndIndex >= brushStartIndex && (
-                          <span className="text-xs text-[#888] font-medium hidden md:inline">
+                          <span className="text-xs text-[#888] font-medium">
                             {format(new Date(chartData[Math.max(0, Math.min(chartData.length - 1, brushStartIndex))].date), 'yyyy-MM-dd')}
                             {' ~ '}
                             {format(new Date(chartData[Math.max(0, Math.min(chartData.length - 1, brushEndIndex))].date), 'yyyy-MM-dd')}
@@ -770,43 +661,26 @@ export default function Home() {
                         )}
                       </div>
 
-                      {/* 移动端日期显示 */}
-                      {isMobile && chartData.length > 0 && brushEndIndex >= brushStartIndex && (
-                        <div className="text-xs text-[#888] font-medium px-2 py-1 bg-[#252525] rounded border border-[#333]">
-                          期间：{format(new Date(chartData[Math.max(0, Math.min(chartData.length - 1, brushStartIndex))].date), 'MM/dd')}
-                          {' ~ '}
-                          {format(new Date(chartData[Math.max(0, Math.min(chartData.length - 1, brushEndIndex))].date), 'MM/dd')}
-                        </div>
-                      )}
-
-                      <div className="flex flex-col md:flex-row items-start md:items-center gap-2 md:gap-3 flex-shrink-0">
-                        <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        <div className="flex items-center gap-2">
                           <button
                             onClick={() => setChartView(chartView === 'cost' ? 'return' : 'cost')}
-                            className={`inline-flex items-center rounded-lg border ${
-                              isMobile
-                                ? 'border-[#2a2a2a] bg-[#252525] px-3 py-2 text-xs font-medium text-[#d0d0d0] shadow-sm hover:bg-[#2a2a2a] hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4a9eff]/70 min-h-[36px] touch-manipulation'
-                                : 'border-[#2a2a2a] bg-[#1f1f1f] px-3 py-1.5 text-xs font-medium text-[#d0d0d0] shadow-sm hover:bg-[#2a2a2a] hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4a9eff]/70'
-                            }`}
+                            className="inline-flex items-center rounded-lg border border-[#2a2a2a] bg-[#1f1f1f] px-3 py-1.5 text-xs font-medium text-[#d0d0d0] shadow-sm hover:bg-[#2a2a2a] hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4a9eff]/70"
                             aria-label="切换视图"
                           >
-                            {isMobile ? (
-                              chartView === 'cost' ? '📈 收益率' : '💰 收益'
-                            ) : (
-                              chartView === 'cost'
-                                ? (mode === 'single'
-                                    ? '切换到收益率表'
-                                    : (mode === 'multi-dca'
-                                        ? '切换到收益率对比'
-                                        : '切换到收益率对比')
-                                  )
-                                : (mode === 'single'
-                                    ? '切换到收益表'
-                                    : (mode === 'multi-dca'
-                                        ? '切换到收益对比'
-                                        : '切换到收益对比')
-                                  )
-                              )
+                            {chartView === 'cost'
+                              ? (mode === 'single'
+                                  ? '切换到收益率表'
+                                  : (mode === 'multi-dca'
+                                      ? '切换到收益率对比'
+                                      : '切换到收益率对比')
+                                )
+                              : (mode === 'single'
+                                  ? '切换到收益表'
+                                  : (mode === 'multi-dca'
+                                      ? '切换到收益对比'
+                                      : '切换到收益对比')
+                                )
                             }
                           </button>
                           {chartData.length > 0 && (
@@ -815,14 +689,10 @@ export default function Home() {
                                 setBrushStartIndex(0);
                                 setBrushEndIndex(chartData.length - 1);
                               }}
-                              className={`inline-flex items-center rounded-lg border ${
-                                isMobile
-                                  ? 'border-[#2a2a2a] bg-[#252525] px-3 py-2 text-xs font-medium text-[#d0d0d0] shadow-sm hover:bg-[#2a2a2a] hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4a9eff]/70 min-h-[36px] touch-manipulation'
-                                  : 'border-[#2a2a2a] bg-[#1f1f1f] px-3 py-1.5 text-xs font-medium text-[#d0d0d0] shadow-sm hover:bg-[#2a2a2a] hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4a9eff]/70'
-                              }`}
+                              className="inline-flex items-center rounded-lg border border-[#2a2a2a] bg-[#1f1f1f] px-3 py-1.5 text-xs font-medium text-[#d0d0d0] shadow-sm hover:bg-[#2a2a2a] hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4a9eff]/70"
                               aria-label="重置区间"
                             >
-                              {isMobile ? '🔄 重置' : '重置区间'}
+                              重置区间
                             </button>
                           )}
                         </div>
@@ -832,7 +702,6 @@ export default function Home() {
                   <InvestmentChart
                     data={chartData}
                     chartView={chartView}
-                    isMobile={isMobile}
                     mode={mode}
                     funds={funds}
                     onZoomChange={(start, end) => {
@@ -844,13 +713,10 @@ export default function Home() {
                   />
                 </div>
 
-                {/* 图表控制工具栏已移动至标题区域 */}
-              </div>
-
-              {/* 定投记录表格 */}
+                {/* 定投记录表格 */}
               {investmentRecords.length > 0 && (
                 <div className="bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl border border-[#2a2a2a] shadow-2xl overflow-hidden flex flex-col">
-                  <div className="px-3 md:px-4 py-2 border-b border-[#2a2a2a] flex-shrink-0 flex items-center justify-between">
+                  <div className="px-4 py-2 border-b border-[#2a2a2a] flex-shrink-0 flex items-center justify-between">
                     <h3 className="text-white text-sm font-bold flex items-center gap-2">
                       <span className="text-base">📋</span>
                       定投记录
@@ -866,15 +732,15 @@ export default function Home() {
                       </button>
                     )}
                   </div>
-                  <div className="overflow-x-auto scroll-smooth" style={{ WebkitOverflowScrolling: 'touch' }}>
-                    <table className="w-full min-w-[600px] md:min-w-full">
+                  <div className="overflow-x-auto scroll-smooth">
+                    <table className="w-full min-w-full">
                       <thead className="sticky top-0 z-10 bg-[#1a1a1a] bg-gradient-to-b from-[#1f1f1f] to-[#1a1a1a]">
                         <tr className="border-b border-[#2a2a2a]">
-                          <th className="px-3 md:px-4 py-2.5 md:py-2 text-left text-xs font-medium text-[#888] uppercase tracking-wider">日期</th>
-                          <th className="px-3 md:px-4 py-2.5 md:py-2 text-left text-xs font-medium text-[#888] uppercase tracking-wider">类型</th>
-                          <th className="px-3 md:px-4 py-2.5 md:py-2 text-left text-xs font-medium text-[#888] uppercase tracking-wider">单位净值</th>
-                          <th className="px-3 md:px-4 py-2.5 md:py-2 text-left text-xs font-medium text-[#888] uppercase tracking-wider">金额</th>
-                          <th className="px-3 md:px-4 py-2.5 md:py-2 text-left text-xs font-medium text-[#888] uppercase tracking-wider">份额</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-[#888] uppercase tracking-wider">日期</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-[#888] uppercase tracking-wider">类型</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-[#888] uppercase tracking-wider">单位净值</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-[#888] uppercase tracking-wider">金额</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-[#888] uppercase tracking-wider">份额</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[#2a2a2a]">
@@ -884,27 +750,25 @@ export default function Home() {
                           const weekday = weekdays[date.getDay()];
                           return (
                             <tr key={`${record.date}-${index}`} className="hover:bg-[#1f1f1f] active:bg-[#252525] transition-colors">
-                              <td className="px-3 md:px-4 py-2.5 md:py-2 whitespace-nowrap text-xs text-[#e0e0e0]">
-                                <span className="hidden sm:inline">{format(date, 'yyyy-MM-dd')} </span>
-                                <span className="sm:hidden">{format(date, 'MM/dd')}</span>
-                                <span className="hidden md:inline"> {weekday}</span>
+                              <td className="px-4 py-2 whitespace-nowrap text-xs text-[#e0e0e0]">
+                                {format(date, 'yyyy-MM-dd')} {weekday}
                               </td>
-                              <td className="px-3 md:px-4 py-2.5 md:py-2 whitespace-nowrap text-xs">
-                                <span className={`px-2 py-1 md:py-0.5 rounded text-xs font-medium ${
-                                  record.type === '定投' 
-                                    ? 'bg-[#4a9eff]/20 text-[#4a9eff] border border-[#4a9eff]/30' 
+                              <td className="px-4 py-2 whitespace-nowrap text-xs">
+                                <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                  record.type === '定投'
+                                    ? 'bg-[#4a9eff]/20 text-[#4a9eff] border border-[#4a9eff]/30'
                                     : 'bg-[#52c41a]/20 text-[#52c41a] border border-[#52c41a]/30'
                                 }`}>
                                   {record.type}
                                 </span>
                               </td>
-                              <td className="px-3 md:px-4 py-2.5 md:py-2 whitespace-nowrap text-xs text-[#e0e0e0]">
+                              <td className="px-4 py-2 whitespace-nowrap text-xs text-[#e0e0e0]">
                                 {record.netValue.toFixed(2)}
                               </td>
-                              <td className="px-3 md:px-4 py-2.5 md:py-2 whitespace-nowrap text-xs text-[#e0e0e0]">
+                              <td className="px-4 py-2 whitespace-nowrap text-xs text-[#e0e0e0]">
                                 {Number(record.investmentAmount.toFixed(2)).toLocaleString('zh-CN')}
                               </td>
-                              <td className="px-3 md:px-4 py-2.5 md:py-2 whitespace-nowrap text-xs text-[#e0e0e0]">
+                              <td className="px-4 py-2 whitespace-nowrap text-xs text-[#e0e0e0]">
                                 {Number(record.shares.toFixed(2))}
                               </td>
                             </tr>
@@ -913,7 +777,7 @@ export default function Home() {
                       </tbody>
                     </table>
                   </div>
-                  <div className="px-3 md:px-4 py-2 border-t border-[#2a2a2a] flex flex-col md:flex-row items-start md:items-center justify-between gap-2">
+                  <div className="px-4 py-2 border-t border-[#2a2a2a] flex items-center justify-between gap-2">
                     <span className="text-xs text-[#888]">
                       第 {recordsPage} / {totalRecordPages} 页 · 共 {investmentRecords.length} 条记录
                     </span>
