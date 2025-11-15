@@ -19,6 +19,11 @@ const StatsSkeleton = dynamic(() => import('./components/Skeleton').then((mod) =
   ssr: false
 });
 
+const FundSelector = dynamic(() => import('./components/FundSelector'), {
+  ssr: false,
+  loading: () => <div className="w-full h-12 bg-[#252525] border border-[#3a3a3a] rounded-lg animate-pulse"></div>
+});
+
 interface FundData {
   date: string;
   netValue: number;  // 单位净值，用于计算申购份额和当前市值
@@ -69,8 +74,15 @@ function parseDateInput(input: string): string | null {
   return null;
 }
 
+interface FundInput {
+  id: string;
+  code: string;
+  name?: string;
+}
+
 export default function Home() {
-  const [fundCode, setFundCode] = useState('');
+  const [mode, setMode] = useState<'single' | 'multi-dca' | 'multi-lumpsum'>('single');
+  const [funds, setFunds] = useState<FundInput[]>([{ id: '1', code: '' }]);
   const [investmentAmount, setInvestmentAmount] = useState('100');
   const [frequency, setFrequency] = useState<'daily' | 'weekly' | 'monthly'>('monthly');
   const [weeklyDayOfWeek, setWeeklyDayOfWeek] = useState<number>(1); // 0=周日, 1=周一, ..., 6=周六
@@ -150,8 +162,20 @@ export default function Home() {
   };
 
   const handleBacktest = async () => {
-    if (!fundCode.trim()) {
-      setError('请输入基金代码');
+    // 验证基金输入
+    const validFunds = funds.filter(fund => fund.code.trim());
+    if (validFunds.length === 0) {
+      setError('请至少输入一个基金代码');
+      return;
+    }
+
+    if (mode === 'single' && validFunds.length !== 1) {
+      setError('单基金模式只能选择一个基金');
+      return;
+    }
+
+    if ((mode === 'multi-dca' || mode === 'multi-lumpsum') && validFunds.length < 2) {
+      setError('多基金比较模式至少需要两个基金');
       return;
     }
 
@@ -183,40 +207,48 @@ export default function Home() {
       setRecordsPage(1);
 
     try {
-      // 获取基金数据（开始日期已确保必填）
-      const fundResponse = await fetch(
-        `/api/fund?code=${encodeURIComponent(fundCode)}&startDate=${parsedStartDate}${parsedEndDate ? `&endDate=${parsedEndDate}` : ''}`
-      );
+      // 获取所有基金的数据
+      const fundPromises = validFunds.map(async (fund) => {
+        const fundResponse = await fetch(
+          `/api/fund?code=${encodeURIComponent(fund.code)}&startDate=${parsedStartDate}${parsedEndDate ? `&endDate=${parsedEndDate}` : ''}`
+        );
 
-      if (!fundResponse.ok) {
-        const errorData = await fundResponse.json();
-        throw new Error(errorData.error || '获取基金数据失败');
-      }
+        if (!fundResponse.ok) {
+          const errorData = await fundResponse.json();
+          throw new Error(`基金${fund.code}: ${errorData.error || '获取数据失败'}`);
+        }
 
-      const fundResult = await fundResponse.json();
-      if (!fundResult.success || !fundResult.data || fundResult.data.length === 0) {
-        throw new Error('未获取到基金数据，请检查基金代码是否正确');
-      }
+        const fundResult = await fundResponse.json();
+        if (!fundResult.success || !fundResult.data || fundResult.data.length === 0) {
+          throw new Error(`基金${fund.code}: 未获取到数据`);
+        }
 
-      const fundData: FundData[] = fundResult.data;
+        return {
+          code: fund.code,
+          data: fundResult.data
+        };
+      });
+
+      const fundDataResults = await Promise.all(fundPromises);
 
       // 如果没有设置日期，使用数据的日期范围
-      const actualStartDate = parsedStartDate || fundData[0].date;
-      const actualEndDate = parsedEndDate || fundData[fundData.length - 1].date;
+      const actualStartDate = parsedStartDate;
+      const actualEndDate = parsedEndDate || fundDataResults[0].data[fundDataResults[0].data.length - 1].date;
 
       // 执行回测
-      const backtestResponse = await fetch('/api/backtest', {
+      const backtestResponse = await fetch('/api/backtest-multi', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          fundData,
+          funds: fundDataResults,
           investmentAmount: parseFloat(investmentAmount),
           frequency,
           weeklyDayOfWeek: frequency === 'weekly' ? weeklyDayOfWeek : undefined,
           startDate: actualStartDate,
           endDate: actualEndDate,
+          mode
         }),
       });
 
@@ -231,103 +263,121 @@ export default function Home() {
 
       // 保存开始日期用于计算年化收益率
       const startDateObj = new Date(actualStartDate);
-      
-      // 准备图表数据：显示累计投入金额和当前份额价值，以及收益率
-      const formattedData = results.map((item) => {
-        const totalInvestment = typeof item.totalInvestment === 'number' ? item.totalInvestment : parseFloat(item.totalInvestment) || 0;
-        const currentValue = typeof item.currentValue === 'number' ? item.currentValue : parseFloat(item.currentValue) || 0;
-        const currentDate = new Date(item.date);
 
-        // 确保数据有效
-        const validTotalInvestment = isFinite(totalInvestment) ? totalInvestment : 0;
-        const validCurrentValue = isFinite(currentValue) ? currentValue : 0;
-        const validAnnualizedRate = item.annualizedReturnRate !== undefined &&
-                                   item.annualizedReturnRate !== null &&
-                                   isFinite(item.annualizedReturnRate) &&
-                                   !isNaN(item.annualizedReturnRate)
+      // 准备图表数据
+      let formattedData: any[] = [];
+
+      if (mode === 'single') {
+        // 单基金模式的原有数据处理逻辑
+        formattedData = results.map((item) => {
+          const totalInvestment = typeof item.totalInvestment === 'number' ? item.totalInvestment : parseFloat(item.totalInvestment) || 0;
+          const currentValue = typeof item.currentValue === 'number' ? item.currentValue : parseFloat(item.currentValue) || 0;
+          const currentDate = new Date(item.date);
+
+          // 确保数据有效
+          const validTotalInvestment = isFinite(totalInvestment) ? totalInvestment : 0;
+          const validCurrentValue = isFinite(currentValue) ? currentValue : 0;
+          const validAnnualizedRate = item.annualizedReturnRate !== undefined &&
+                                     item.annualizedReturnRate !== null &&
+                                     isFinite(item.annualizedReturnRate) &&
+                                     !isNaN(item.annualizedReturnRate)
             ? Number(item.annualizedReturnRate.toFixed(2))
-            : 0; // 默认值为0而不是null
+            : 0;
 
-        return {
-          date: format(new Date(item.date), 'yyyy-MM-dd'),
-          dateObj: currentDate, // 保存日期对象用于计算
-          totalInvestment: Number(validTotalInvestment.toFixed(2)),  // 累计投入金额
-          currentValue: Number(validCurrentValue.toFixed(2)),  // 当前份额价值（份额 × 单位净值）
-          // 收益率（百分比），确保有有效值
-          annualizedReturnRate: validAnnualizedRate,
-          cumulativePrice: item.cumulativePrice, // 累计净值，用于一次性投入计算（包含分红）
-        };
-      });
+          return {
+            date: format(new Date(item.date), 'yyyy-MM-dd'),
+            dateObj: currentDate,
+            totalInvestment: Number(validTotalInvestment.toFixed(2)),
+            currentValue: Number(validCurrentValue.toFixed(2)),
+            annualizedReturnRate: validAnnualizedRate,
+            cumulativePrice: item.cumulativePrice,
+          };
+        });
+      } else {
+        // 多基金模式的数据处理
+        formattedData = results.map((item) => {
+          const currentDate = new Date(item.date);
+          const baseData: any = {
+            date: format(new Date(item.date), 'yyyy-MM-dd'),
+            dateObj: currentDate,
+            cumulativePrice: item.cumulativePrice
+          };
 
-      // 计算时间段的变化百分比（一次性投入收益率）
-      // 使用累计净值计算：从开始日期的累计净值到结束日期的累计净值的变化
+          // 根据模式添加不同的数据字段
+          if (mode === 'multi-dca') {
+            // 多基金定投模式
+            validFunds.forEach((fund, index) => {
+              const fundPrefix = `fund${index + 1}`;
+              baseData[`${fundPrefix}_currentValue`] = Number((item[`${fundPrefix}_currentValue`] || 0).toFixed(2));
+              baseData[`${fundPrefix}_totalInvestment`] = Number((item[`${fundPrefix}_totalInvestment`] || 0).toFixed(2));
+              baseData[`${fundPrefix}_return`] = Number((item[`${fundPrefix}_return`] || 0).toFixed(2));
+            });
+          } else if (mode === 'multi-lumpsum') {
+            // 多基金一次性投入模式
+            validFunds.forEach((fund, index) => {
+              const fundPrefix = `fund${index + 1}`;
+              baseData[`${fundPrefix}_lumpSum`] = Number((item[`${fundPrefix}_lumpSum`] || 0).toFixed(2));
+              baseData[`${fundPrefix}_lumpSumReturn`] = Number((item[`${fundPrefix}_lumpSumReturn`] || 0).toFixed(2));
+            });
+          }
+
+          return baseData;
+        });
+      }
+
+      // 计算统计数据
       let priceChangePercent = 0;
-      if (results.length > 0) {
+      if (results.length > 0 && mode === 'single') {
         const firstCumulativePrice = results[0].cumulativePrice;
         const lastCumulativePrice = results[results.length - 1].cumulativePrice;
         priceChangePercent = ((lastCumulativePrice - firstCumulativePrice) / firstCumulativePrice) * 100;
       }
 
-      // 计算Y轴范围，使图表更好地展示数据（使用金额数据）
-      const allValues = formattedData.flatMap(item => [
-        item.totalInvestment,
-        item.currentValue
-      ]).filter((v): v is number => v !== null && !isNaN(v) && isFinite(v) && v >= 0);
+      // 计算Y轴范围（单基金模式）
+      let yAxisDomain: [number, number] = [0, 1000];
+      let yAxisRightDomain: [number, number] = [-10, 10];
 
-      // 计算收益率Y轴范围（右侧Y轴）
-      const allReturnRates = formattedData.flatMap(item => [
-        item.annualizedReturnRate
-      ]).filter((v): v is number => v !== null && !isNaN(v) && isFinite(v));
+      if (mode === 'single' && formattedData.length > 0) {
+        const allValues = formattedData.flatMap(item => [
+          item.totalInvestment,
+          item.currentValue
+        ]).filter((v): v is number => v !== null && !isNaN(v) && isFinite(v) && v >= 0);
 
-      if (allValues.length === 0) {
-        // 如果没有有效数据，使用默认范围
-        const yAxisDomain = [0, 1000];
-        const yAxisRightDomain = [-10, 10];
-        setChartData(formattedData);
-        setStats({ ...backtestResult.stats, yAxisDomain, yAxisRightDomain, priceChangePercent });
-        setInvestmentRecords(records);
-        // 初始化缩放范围：显示全部数据
-        setBrushStartIndex(0);
-        setBrushEndIndex(formattedData.length > 0 ? formattedData.length - 1 : 0);
-        return;
+        const allReturnRates = formattedData.flatMap(item => [
+          item.annualizedReturnRate
+        ]).filter((v): v is number => v !== null && !isNaN(v) && isFinite(v));
+
+        if (allValues.length > 0) {
+          const minValue = Math.min(...allValues);
+          const maxValue = Math.max(...allValues);
+          const range = maxValue - minValue;
+          const padding = Math.max(range * 0.1, maxValue * 0.05);
+          yAxisDomain = [0, maxValue + padding];
+        }
+
+        if (allReturnRates.length > 0) {
+          const minRate = Math.min(...allReturnRates);
+          const maxRate = Math.max(...allReturnRates);
+          const rateRange = maxRate - minRate;
+          const ratePadding = Math.max(rateRange * 0.1, Math.abs(maxRate) * 0.05, 2);
+          yAxisRightDomain = [
+            Math.max(minRate - ratePadding, -50),
+            Math.min(maxRate + ratePadding, 50)
+          ];
+        }
       }
 
-      const minValue = Math.min(...allValues);
-      const maxValue = Math.max(...allValues);
-      const range = maxValue - minValue;
-      const padding = Math.max(range * 0.1, maxValue * 0.05); // 10% 的边距或最大值的5%
-      // 确保Y轴从0开始，便于对比
-      const yAxisMin = 0;
-      const yAxisDomain = [
-        yAxisMin,
-        maxValue + padding
-      ];
-
-      // 计算收益率Y轴范围（右侧Y轴）
-      let yAxisRightDomain: [number, number] = [-10, 10]; // 默认范围
-      if (allReturnRates.length > 0) {
-        const minRate = Math.min(...allReturnRates);
-        const maxRate = Math.max(...allReturnRates);
-        const rateRange = maxRate - minRate;
-        const ratePadding = Math.max(rateRange * 0.1, Math.abs(maxRate) * 0.05, 2); // 至少2%
-        yAxisRightDomain = [
-          Math.max(minRate - ratePadding, -50), // 限制最大负值
-          Math.min(maxRate + ratePadding, 50)   // 限制最大正值
-        ];
-      }
-
-      // 调试：输出图表数据状态
       console.log('图表数据准备完成:', {
+        mode,
         dataLength: formattedData.length,
         firstItem: formattedData[0],
         lastItem: formattedData[formattedData.length - 1],
         yAxisDomain,
-        yAxisRightDomain,
-        sampleData: formattedData.slice(0, 3)
+        yAxisRightDomain
       });
 
       setChartData(formattedData);
-      setStats({ ...backtestResult.stats, yAxisDomain, yAxisRightDomain, priceChangePercent, startDate: actualStartDate });
+      setStats({ ...backtestResult.stats, yAxisDomain, yAxisRightDomain, priceChangePercent, startDate: actualStartDate, mode });
       setInvestmentRecords(records);
       // 初始化缩放范围：显示全部数据
       setBrushStartIndex(0);
@@ -403,18 +453,13 @@ export default function Home() {
             <div className="group">
               <label htmlFor="fundCode" className="block mb-2 text-[#b0b0b0] font-medium text-sm flex items-center gap-2">
                 <span className="text-[#4a9eff]">📊</span>
-                基金代码
+                基金选择
               </label>
-              <input
-                id="fundCode"
-                type="text"
-                value={fundCode}
-                onChange={(e) => setFundCode(e.target.value)}
-                placeholder="例如：000001"
-                className="w-full px-4 py-3 md:py-2.5 border border-[#3a3a3a] rounded-lg text-base md:text-sm transition-all duration-200 bg-[#252525] text-[#e0e0e0] placeholder:text-[#666] focus:outline-none focus:border-[#4a9eff] focus:bg-[#2a2a2a] focus:shadow-[0_0_0_3px_rgba(74,158,255,0.1)] hover:border-[#4a4a4a] touch-manipulation"
-                tabIndex={0}
-                aria-label="基金代码输入框"
-                inputMode="numeric"
+              <FundSelector
+                mode={mode}
+                onModeChange={setMode}
+                funds={funds}
+                onFundsChange={setFunds}
               />
             </div>
 
@@ -675,9 +720,15 @@ export default function Home() {
                   <div className="flex flex-col gap-3 px-4 py-3 border-b border-[#2a2a2a]">
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                       <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-white text-base md:text-lg font-semibold">
-                          {chartView === 'cost' ? '收益表' : '收益率表'}
-                        </h3>
+                    <h3 className="text-white text-base md:text-lg font-semibold">
+                      {mode === 'single'
+                        ? (chartView === 'cost' ? '收益表' : '收益率表')
+                        : (mode === 'multi-dca'
+                            ? (chartView === 'cost' ? '多基金定投收益对比' : '多基金定投收益率对比')
+                            : (chartView === 'cost' ? '多基金一次性投入收益对比' : '多基金一次性投入收益率对比')
+                        )
+                      }
+                    </h3>
                         {chartData.length > 0 && brushEndIndex >= brushStartIndex && (
                           <span className="text-xs md:text-sm text-[#888] font-medium">
                             {format(new Date(chartData[Math.max(0, Math.min(chartData.length - 1, brushStartIndex))].date), 'yyyy-MM-dd')}
@@ -692,7 +743,20 @@ export default function Home() {
                           className="inline-flex items-center rounded-md border border-[#2a2a2a] bg-[#1f1f1f] px-3 py-1.5 text-xs font-medium text-[#d0d0d0] shadow-sm hover:bg-[#2a2a2a] hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4a9eff]/70"
                           aria-label="切换视图"
                         >
-                          {chartView === 'cost' ? '切换到收益率表' : '切换到收益表'}
+                          {chartView === 'cost'
+                            ? (mode === 'single'
+                                ? '切换到收益率表'
+                                : (mode === 'multi-dca'
+                                    ? '切换到收益率对比'
+                                    : '切换到收益率对比')
+                              )
+                            : (mode === 'single'
+                                ? '切换到收益表'
+                                : (mode === 'multi-dca'
+                                    ? '切换到收益对比'
+                                    : '切换到收益对比')
+                              )
+                          }
                         </button>
                         {chartData.length > 0 && (
                           <button
@@ -713,6 +777,8 @@ export default function Home() {
                     data={chartData}
                     chartView={chartView}
                     isMobile={isMobile}
+                    mode={mode}
+                    funds={funds}
                     onZoomChange={(start, end) => {
                       setBrushStartIndex(start);
                       setBrushEndIndex(end);

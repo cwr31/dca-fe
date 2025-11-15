@@ -25,36 +25,57 @@ interface InvestmentChartProps {
   data: ChartDataPoint[];
   chartView: 'cost' | 'return';
   isMobile: boolean;
+  mode?: 'single' | 'multi-dca' | 'multi-lumpsum';
+  funds?: Array<{ id: string; code: string; name?: string }>;
   onZoomChange?: (startIndex: number, endIndex: number) => void;
   brushStartIndex?: number;
   brushEndIndex?: number;
+  onToggleSeries?: (key: string) => void;
+  externalSeriesVisibility?: any;
 }
 
 export default function InvestmentChart({
   data,
   chartView,
   isMobile,
+  mode = 'single',
+  funds = [],
   onZoomChange,
   brushStartIndex = 0,
   brushEndIndex = 0,
   onToggleSeries,
   externalSeriesVisibility,
-}: InvestmentChartProps & {
-  onToggleSeries?: (key: string) => void;
-  externalSeriesVisibility?: any;
-}) {
+}: InvestmentChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<any[]>([]);
   const tooltipRef = useRef<HTMLDivElement | null>(null);
   const selectionStateRef = useRef({ active: false, startX: 0, currentX: 0 });
   const [isChartReady, setIsChartReady] = useState(false);
-  const [internalSeriesVisibility, setInternalSeriesVisibility] = useState({
-    cost: true,
-    value: true,
-    lumpSum: true,
-    return: true,
-    lumpSumReturn: true,
+  const [internalSeriesVisibility, setInternalSeriesVisibility] = useState(() => {
+    if (mode === 'single') {
+      return {
+        cost: true,
+        value: true,
+        lumpSum: true,
+        return: true,
+        lumpSumReturn: true,
+      };
+    } else {
+      // 多基金模式的初始状态
+      const visibility: any = {};
+      funds.forEach((fund, index) => {
+        if (mode === 'multi-dca') {
+          visibility[`fund${index + 1}_value`] = true;
+          visibility[`fund${index + 1}_investment`] = true;
+          visibility[`fund${index + 1}_return`] = true;
+        } else if (mode === 'multi-lumpsum') {
+          visibility[`fund${index + 1}_lumpSum`] = true;
+          visibility[`fund${index + 1}_lumpSumReturn`] = true;
+        }
+      });
+      return visibility;
+    }
   });
   const [selectionOverlay, setSelectionOverlay] = useState({
     visible: false,
@@ -68,11 +89,39 @@ export default function InvestmentChart({
 
   // 系列配置
   const seriesConfig = {
+    // 单基金模式配置
     cost: { name: '累计投入', color: '#00CED1' },
     value: { name: '当前价值', color: '#FFD700' },
     lumpSum: { name: '一次性投入', color: '#FF6BFF' },
     return: { name: '定投年化收益率', color: '#4ECDC4' },
     lumpSumReturn: { name: '一次性投入年化收益率', color: '#FF6BFF' },
+  };
+
+  // 获取多基金颜色配置
+  const getFundColor = (index: number) => {
+    const colors = ['#00CED1', '#FFD700', '#FF6BFF', '#4ECDC4', '#FF8C00', '#32CD32'];
+    return colors[index % colors.length];
+  };
+
+  // 获取多基金系列配置
+  const getMultiFundSeriesConfig = (fundIndex: number, type: string) => {
+    const baseColor = getFundColor(fundIndex);
+    const fundCode = funds[fundIndex]?.code || `基金${fundIndex + 1}`;
+
+    switch (type) {
+      case 'value':
+        return { name: `${fundCode} 当前价值`, color: baseColor };
+      case 'investment':
+        return { name: `${fundCode} 累计投入`, color: baseColor, lineStyle: 'dashed' };
+      case 'return':
+        return { name: `${fundCode} 年化收益率`, color: baseColor };
+      case 'lumpSum':
+        return { name: `${fundCode} 一次性投入`, color: baseColor };
+      case 'lumpSumReturn':
+        return { name: `${fundCode} 一次性收益率`, color: baseColor };
+      default:
+        return { name: fundCode, color: baseColor };
+    }
   };
 
   // 切换系列可见性
@@ -210,80 +259,105 @@ export default function InvestmentChart({
 
   // 转换数据为 lightweight-charts 格式
   const convertData = useCallback(() => {
-    if (!data || data.length === 0) return { costData: [], valueData: [], returnData: [], lumpSumData: [], lumpSumReturnData: [] };
+    if (!data || data.length === 0) return { seriesData: {} };
 
-    const costData = data.map(item => ({
-      time: item.date as any,
-      value: item.totalInvestment,
-    }));
+    const seriesData: any = {};
 
-    const valueData = data.map(item => ({
-      time: item.date as any,
-      value: item.currentValue,
-    }));
+    if (mode === 'single') {
+      // 单基金模式的原有逻辑
+      const costData = data.map(item => ({
+        time: item.date as any,
+        value: item.totalInvestment,
+      }));
 
-    const returnData = data.map(item => ({
-      time: item.date as any,
-      value: item.annualizedReturnRate,
-    }));
+      const valueData = data.map(item => ({
+        time: item.date as any,
+        value: item.currentValue,
+      }));
 
-    // 计算一次性投入的年化收益率数据
-    const lumpSumReturnData = data.map((item, index) => {
-      if (index === 0) {
-        // 第一个时间点，一次性投入收益率为0
-        return {
-          time: item.date as any,
-          value: 0,
-        };
-      } else {
-        // 后续时间点，基于累计净值计算一次性投入的累计收益率
-        const initialCumulativePrice = data[0].cumulativePrice || data[0].currentValue;
-        const currentCumulativePrice = item.cumulativePrice || item.currentValue;
-        const totalReturnRate = initialCumulativePrice > 0 ?
-          ((currentCumulativePrice - initialCumulativePrice) / initialCumulativePrice) * 100 : 0;
+      const returnData = data.map(item => ({
+        time: item.date as any,
+        value: item.annualizedReturnRate,
+      }));
 
-        // 转换为年化收益率（简化计算，基于总时间）
-        const totalDays = Math.floor((new Date(item.date).getTime() - new Date(data[0].date).getTime()) / (1000 * 60 * 60 * 24));
-        const years = totalDays > 0 ? totalDays / 365.25 : 0;
-        const annualizedReturn = years > 0 ? (Math.pow(1 + totalReturnRate / 100, 1 / years) - 1) * 100 : 0;
+      // 计算一次性投入的年化收益率数据
+      const lumpSumReturnData = data.map((item, index) => {
+        if (index === 0) {
+          return { time: item.date as any, value: 0 };
+        } else {
+          const initialCumulativePrice = data[0].cumulativePrice || data[0].currentValue;
+          const currentCumulativePrice = item.cumulativePrice || item.currentValue;
+          const totalReturnRate = initialCumulativePrice > 0 ?
+            ((currentCumulativePrice - initialCumulativePrice) / initialCumulativePrice) * 100 : 0;
 
-        return {
-          time: item.date as any,
-          value: Number(annualizedReturn.toFixed(2)),
-        };
-      }
-    });
+          const totalDays = Math.floor((new Date(item.date).getTime() - new Date(data[0].date).getTime()) / (1000 * 60 * 60 * 24));
+          const years = totalDays > 0 ? totalDays / 365.25 : 0;
+          const annualizedReturn = years > 0 ? (Math.pow(1 + totalReturnRate / 100, 1 / years) - 1) * 100 : 0;
 
-    // 计算一次性投入的数据（基于累计净值，包含分红）
-    // 一次性投入的初始金额 = 定投总期数 × 单次定投金额
-    // 使用最后一个时间点的总投入金额作为参考（这是最准确的定投总本金）
-    const totalPeriods = data.length; // 定投期数
-    const lumpSumInitialInvestment = data[data.length - 1]?.totalInvestment || data[0]?.totalInvestment || 0;
+          return { time: item.date as any, value: Number(annualizedReturn.toFixed(2)) };
+        }
+      });
 
-    const lumpSumData = data.map((item, index) => {
-      if (index === 0) {
-        // 第一个时间点，一次性投入总本金（等于定投的总投入金额）
-        return {
-          time: item.date as any,
-          value: lumpSumInitialInvestment,
-        };
-      } else {
-        // 后续时间点，基于累计净值变化计算一次性投入的价值
-        // 这样可以确保包含分红再投资的效果
-        const initialCumulativePrice = data[0].cumulativePrice || data[0].currentValue;
-        const currentCumulativePrice = item.cumulativePrice || item.currentValue;
-        const priceRatio = initialCumulativePrice > 0 ? (currentCumulativePrice / initialCumulativePrice) : 1;
-        const lumpSumValue = lumpSumInitialInvestment * priceRatio;
+      // 计算一次性投入的数据
+      const totalPeriods = data.length;
+      const lumpSumInitialInvestment = data[data.length - 1]?.totalInvestment || data[0]?.totalInvestment || 0;
 
-        return {
-          time: item.date as any,
-          value: lumpSumValue,
-        };
-      }
-    });
+      const lumpSumData = data.map((item, index) => {
+        if (index === 0) {
+          return { time: item.date as any, value: lumpSumInitialInvestment };
+        } else {
+          const initialCumulativePrice = data[0].cumulativePrice || data[0].currentValue;
+          const currentCumulativePrice = item.cumulativePrice || item.currentValue;
+          const priceRatio = initialCumulativePrice > 0 ? (currentCumulativePrice / initialCumulativePrice) : 1;
+          const lumpSumValue = lumpSumInitialInvestment * priceRatio;
 
-    return { costData, valueData, returnData, lumpSumData, lumpSumReturnData: lumpSumReturnData || [] };
-  }, [data]);
+          return { time: item.date as any, value: lumpSumValue };
+        }
+      });
+
+      seriesData.cost = costData;
+      seriesData.value = valueData;
+      seriesData.return = returnData;
+      seriesData.lumpSum = lumpSumData;
+      seriesData.lumpSumReturn = lumpSumReturnData;
+    } else {
+      // 多基金模式
+      funds.forEach((fund, fundIndex) => {
+        const fundPrefix = `fund${fundIndex + 1}`;
+
+        if (mode === 'multi-dca') {
+          // 多基金定投模式
+          seriesData[`${fundPrefix}_currentValue`] = data.map(item => ({
+            time: item.date as any,
+            value: item[`${fundPrefix}_currentValue`] || 0,
+          }));
+
+          seriesData[`${fundPrefix}_totalInvestment`] = data.map(item => ({
+            time: item.date as any,
+            value: item[`${fundPrefix}_totalInvestment`] || 0,
+          }));
+
+          seriesData[`${fundPrefix}_return`] = data.map(item => ({
+            time: item.date as any,
+            value: item[`${fundPrefix}_return`] || 0,
+          }));
+        } else if (mode === 'multi-lumpsum') {
+          // 多基金一次性投入模式
+          seriesData[`${fundPrefix}_lumpSum`] = data.map(item => ({
+            time: item.date as any,
+            value: item[`${fundPrefix}_lumpSum`] || 0,
+          }));
+
+          seriesData[`${fundPrefix}_lumpSumReturn`] = data.map(item => ({
+            time: item.date as any,
+            value: item[`${fundPrefix}_lumpSumReturn`] || 0,
+          }));
+        }
+      });
+    }
+
+    return { seriesData };
+  }, [data, mode, funds]);
 
   // 创建浮动工具提示
   const createTooltip = useCallback(() => {
@@ -421,59 +495,96 @@ export default function InvestmentChart({
       const item = data[dataIndex];
       let tooltipContent = '';
 
-      if (chartView === 'cost') {
-        // 成本视图显示三条线的数据
-        const currentReturnRate = ((item.currentValue - item.totalInvestment) / item.totalInvestment) * 100;
+      if (mode === 'single') {
+        // 单基金模式的工具提示
+        if (chartView === 'cost') {
+          const currentReturnRate = ((item.currentValue - item.totalInvestment) / item.totalInvestment) * 100;
+          const lumpSumInitial = data[data.length - 1]?.totalInvestment || data[0]?.totalInvestment || 0;
+          const initialCumulativePrice = data[0].cumulativePrice || data[0].currentValue;
+          const currentCumulativePrice = item.cumulativePrice || item.currentValue;
+          const priceRatio = initialCumulativePrice > 0 ? (currentCumulativePrice / initialCumulativePrice) : 1;
+          const lumpSumCurrent = lumpSumInitial * priceRatio;
+          const lumpSumReturnRate = ((lumpSumCurrent - lumpSumInitial) / lumpSumInitial) * 100;
 
-        // 计算一次性投入的当前价值和收益率
-        // 使用最后一个时间点的总投入金额作为一次性投入的初始本金
-        const lumpSumInitial = data[data.length - 1]?.totalInvestment || data[0]?.totalInvestment || 0;
-        // 基于累计净值计算一次性投入的当前价值（包含分红）
-        const initialCumulativePrice = data[0].cumulativePrice || data[0].currentValue;
-        const currentCumulativePrice = item.cumulativePrice || item.currentValue;
-        const priceRatio = initialCumulativePrice > 0 ? (currentCumulativePrice / initialCumulativePrice) : 1;
-        const lumpSumCurrent = lumpSumInitial * priceRatio;
-        const lumpSumReturnRate = ((lumpSumCurrent - lumpSumInitial) / lumpSumInitial) * 100;
+          tooltipContent = `
+            <div style="margin-bottom: 4px; color: #00CED1; font-weight: 600;">
+              累计投入: ¥${item.totalInvestment.toFixed(2)}
+            </div>
+            <div style="margin-bottom: 4px; color: #FFD700; font-weight: 600;">
+              当前价值: ¥${item.currentValue.toFixed(2)}
+            </div>
+            <div style="margin-bottom: 4px; color: #FF6BFF; font-weight: 600;">
+              一次性投入: ¥${lumpSumCurrent.toFixed(2)}
+            </div>
+            <div style="color: #4ECDC4; font-size: 11px;">
+              定投收益率: ${currentReturnRate.toFixed(2)}% | 一次性收益率: ${lumpSumReturnRate.toFixed(2)}%
+            </div>
+          `;
+        } else {
+          const currentReturnRate = item.annualizedReturnRate;
+          const lumpSumInitial = data[data.length - 1]?.totalInvestment || data[0]?.totalInvestment || 0;
+          const initialCumulativePrice = data[0].cumulativePrice || data[0].currentValue;
+          const currentCumulativePrice = item.cumulativePrice || item.currentValue;
+          const priceRatio = initialCumulativePrice > 0 ? (currentCumulativePrice / initialCumulativePrice) : 1;
+          const lumpSumCurrent = lumpSumInitial * priceRatio;
+          const totalDays = Math.floor((new Date(item.date).getTime() - new Date(data[0].date).getTime()) / (1000 * 60 * 60 * 24));
+          const years = totalDays > 0 ? totalDays / 365.25 : 0;
+          const totalReturnRate = ((lumpSumCurrent - lumpSumInitial) / lumpSumInitial) * 100;
+          const lumpSumAnnualizedReturn = years > 0 ? (Math.pow(1 + totalReturnRate / 100, 1 / years) - 1) * 100 : 0;
 
-        tooltipContent = `
-          <div style="margin-bottom: 4px; color: #00CED1; font-weight: 600;">
-            累计投入: ¥${item.totalInvestment.toFixed(2)}
-          </div>
-          <div style="margin-bottom: 4px; color: #FFD700; font-weight: 600;">
-            当前价值: ¥${item.currentValue.toFixed(2)}
-          </div>
-          <div style="margin-bottom: 4px; color: #FF6BFF; font-weight: 600;">
-            一次性投入: ¥${lumpSumCurrent.toFixed(2)}
-          </div>
-          <div style="color: #4ECDC4; font-size: 11px;">
-            定投收益率: ${currentReturnRate.toFixed(2)}% | 一次性收益率: ${lumpSumReturnRate.toFixed(2)}%
-          </div>
-        `;
+          tooltipContent = `
+            <div style="margin-bottom: 4px; color: #4ECDC4; font-weight: 600;">
+              定投年化收益率: ${currentReturnRate.toFixed(2)}%
+            </div>
+            <div style="margin-bottom: 4px; color: #FF6BFF; font-weight: 600;">
+              一次性投入年化收益率: ${lumpSumAnnualizedReturn.toFixed(2)}%
+            </div>
+          `;
+        }
       } else {
-        // 收益率视图显示两条年化收益率曲线对比
-        const currentReturnRate = item.annualizedReturnRate;
+        // 多基金模式的工具提示
+        funds.forEach((fund, fundIndex) => {
+          const fundPrefix = `fund${fundIndex + 1}`;
+          const fundColor = getFundColor(fundIndex);
+          const fundCode = fund.code || `基金${fundIndex + 1}`;
 
-        // 计算一次性投入的年化收益率
-        const lumpSumInitial = data[data.length - 1]?.totalInvestment || data[0]?.totalInvestment || 0;
-        const initialCumulativePrice = data[0].cumulativePrice || data[0].currentValue;
-        const currentCumulativePrice = item.cumulativePrice || item.currentValue;
-        const priceRatio = initialCumulativePrice > 0 ? (currentCumulativePrice / initialCumulativePrice) : 1;
-        const lumpSumCurrent = lumpSumInitial * priceRatio;
+          if (mode === 'multi-dca') {
+            if (chartView === 'cost') {
+              const currentValue = item[`${fundPrefix}_currentValue`] || 0;
+              const totalInvestment = item[`${fundPrefix}_totalInvestment`] || 0;
+              const returnRate = totalInvestment > 0 ? ((currentValue - totalInvestment) / totalInvestment) * 100 : 0;
 
-        // 重新计算一次性投入的年化收益率（与convertData中的逻辑一致）
-        const totalDays = Math.floor((new Date(item.date).getTime() - new Date(data[0].date).getTime()) / (1000 * 60 * 60 * 24));
-        const years = totalDays > 0 ? totalDays / 365.25 : 0;
-        const totalReturnRate = ((lumpSumCurrent - lumpSumInitial) / lumpSumInitial) * 100;
-        const lumpSumAnnualizedReturn = years > 0 ? (Math.pow(1 + totalReturnRate / 100, 1 / years) - 1) * 100 : 0;
-
-        tooltipContent = `
-          <div style="margin-bottom: 4px; color: #4ECDC4; font-weight: 600;">
-            定投年化收益率: ${currentReturnRate.toFixed(2)}%
-          </div>
-          <div style="margin-bottom: 4px; color: #FF6BFF; font-weight: 600;">
-            一次性投入年化收益率: ${lumpSumAnnualizedReturn.toFixed(2)}%
-          </div>
-        `;
+              tooltipContent += `
+                <div style="margin-bottom: 4px; color: ${fundColor}; font-weight: 600;">
+                  ${fundCode}: ¥${currentValue.toFixed(2)} (${returnRate.toFixed(2)}%)
+                </div>
+              `;
+            } else {
+              const returnRate = item[`${fundPrefix}_return`] || 0;
+              tooltipContent += `
+                <div style="margin-bottom: 4px; color: ${fundColor}; font-weight: 600;">
+                  ${fundCode} 年化收益率: ${returnRate.toFixed(2)}%
+                </div>
+              `;
+            }
+          } else if (mode === 'multi-lumpsum') {
+            if (chartView === 'cost') {
+              const lumpSumValue = item[`${fundPrefix}_lumpSum`] || 0;
+              tooltipContent += `
+                <div style="margin-bottom: 4px; color: ${fundColor}; font-weight: 600;">
+                  ${fundCode} 一次性投入: ¥${lumpSumValue.toFixed(2)}
+                </div>
+              `;
+            } else {
+              const lumpSumReturn = item[`${fundPrefix}_lumpSumReturn`] || 0;
+              tooltipContent += `
+                <div style="margin-bottom: 4px; color: ${fundColor}; font-weight: 600;">
+                  ${fundCode} 一次性收益率: ${lumpSumReturn.toFixed(2)}%
+                </div>
+              `;
+            }
+          }
+        });
       }
 
       tooltip.innerHTML = `
@@ -488,13 +599,13 @@ export default function InvestmentChart({
       const chartWidth = containerRect.width;
       const chartHeight = containerRect.height;
 
-      let left = param.point.x - 215; // 从左侧显示（因为Y轴在右边）
+      let left = param.point.x - 215;
       let top = param.point.y - 40;
 
       // 防止工具提示超出图表边界
       const tooltipRect = tooltip.getBoundingClientRect();
       if (left < 0) {
-        left = param.point.x + 15; // 如果太靠左，就显示在右边
+        left = param.point.x + 15;
       }
       if (top < 0) {
         top = param.point.y + 15;
@@ -504,14 +615,14 @@ export default function InvestmentChart({
       tooltip.style.top = `${top}px`;
       tooltip.style.display = 'block';
     });
-  }, [data, chartView]);
+  }, [data, chartView, mode, funds]);
 
   // 更新系列数据
   useEffect(() => {
     if (!chartRef.current || !isChartReady) return;
 
     const chart = chartRef.current;
-    const { costData, valueData, returnData, lumpSumData, lumpSumReturnData } = convertData();
+    const { seriesData } = convertData();
 
     // 清除现有系列
     seriesRef.current.forEach(series => {
@@ -519,96 +630,200 @@ export default function InvestmentChart({
     });
     seriesRef.current = [];
 
-    if (chartView === 'cost') {
-      // 成本视图 - 添加三条曲线对比
-      if (seriesVisibility.cost) {
-        const costSeries = chart.addSeries(LineSeries, {
-          color: seriesConfig.cost.color,
-          lineWidth: 2,
-          crosshairMarkerVisible: true,
-          crosshairMarkerRadius: 4,
-          crosshairMarkerBackgroundColor: seriesConfig.cost.color,
-          crosshairMarkerBorderColor: '#ffffff',
-          crosshairMarkerBorderWidth: 2,
+    if (mode === 'single') {
+      // 单基金模式的原有逻辑
+      if (chartView === 'cost') {
+        // 成本视图 - 添加三条曲线对比
+        if (seriesVisibility.cost) {
+          const costSeries = chart.addSeries(LineSeries, {
+            color: seriesConfig.cost.color,
+            lineWidth: 2,
+            crosshairMarkerVisible: true,
+            crosshairMarkerRadius: 4,
+            crosshairMarkerBackgroundColor: seriesConfig.cost.color,
+            crosshairMarkerBorderColor: '#ffffff',
+            crosshairMarkerBorderWidth: 2,
+            priceLineVisible: false,
+          } as LineSeriesOptions);
+          costSeries.setData(seriesData.cost || []);
+          seriesRef.current.push(costSeries);
+        }
 
-          priceLineVisible: false, // 完全移除priceLine（最终点的水平线）
-        } as LineSeriesOptions);
-        costSeries.setData(costData);
-        seriesRef.current.push(costSeries);
-      }
+        if (seriesVisibility.value) {
+          const valueSeries = chart.addSeries(LineSeries, {
+            color: seriesConfig.value.color,
+            lineWidth: 2,
+            crosshairMarkerVisible: true,
+            crosshairMarkerRadius: 4,
+            crosshairMarkerBackgroundColor: seriesConfig.value.color,
+            crosshairMarkerBorderColor: '#ffffff',
+            crosshairMarkerBorderWidth: 2,
+            priceLineVisible: false,
+          } as LineSeriesOptions);
+          valueSeries.setData(seriesData.value || []);
+          seriesRef.current.push(valueSeries);
+        }
 
-      if (seriesVisibility.value) {
-        const valueSeries = chart.addSeries(LineSeries, {
-          color: seriesConfig.value.color,
-          lineWidth: 2,
-          crosshairMarkerVisible: true,
-          crosshairMarkerRadius: 4,
-          crosshairMarkerBackgroundColor: seriesConfig.value.color,
-          crosshairMarkerBorderColor: '#ffffff',
-          crosshairMarkerBorderWidth: 2,
+        if (seriesVisibility.lumpSum) {
+          const lumpSumSeries = chart.addSeries(LineSeries, {
+            color: seriesConfig.lumpSum.color,
+            lineWidth: 2,
+            crosshairMarkerVisible: true,
+            crosshairMarkerRadius: 4,
+            crosshairMarkerBackgroundColor: seriesConfig.lumpSum.color,
+            crosshairMarkerBorderColor: '#ffffff',
+            crosshairMarkerBorderWidth: 2,
+            priceLineVisible: false,
+          } as LineSeriesOptions);
+          lumpSumSeries.setData(seriesData.lumpSum || []);
+          seriesRef.current.push(lumpSumSeries);
+        }
+      } else {
+        // 收益率视图 - 添加定投和一次性投入的收益率曲线对比
+        if (seriesVisibility.return) {
+          const returnSeries = chart.addSeries(BaselineSeries, {
+            baseValue: { type: 'price', price: 0 },
+            topLineColor: seriesConfig.return.color,
+            topFillColor1: 'rgba(78, 205, 196, 0.3)',
+            topFillColor2: 'rgba(78, 205, 196, 0.05)',
+            bottomLineColor: '#FF6B6B',
+            bottomFillColor1: 'rgba(255, 107, 107, 0.3)',
+            bottomFillColor2: 'rgba(255, 107, 107, 0.05)',
+            lineWidth: 2,
+            crosshairMarkerVisible: true,
+            crosshairMarkerRadius: 4,
+            crosshairMarkerBackgroundColor: seriesConfig.return.color,
+            crosshairMarkerBorderColor: '#ffffff',
+            crosshairMarkerBorderWidth: 2,
+            priceLineVisible: false,
+          } as any);
+          returnSeries.setData(seriesData.return || []);
+          seriesRef.current.push(returnSeries);
+        }
 
-          priceLineVisible: false, // 完全移除priceLine（最终点的水平线）
-        } as LineSeriesOptions);
-        valueSeries.setData(valueData);
-        seriesRef.current.push(valueSeries);
-      }
-
-      // 添加一次性投入曲线
-      if (seriesVisibility.lumpSum) {
-        const lumpSumSeries = chart.addSeries(LineSeries, {
-          color: seriesConfig.lumpSum.color, // 紫色，便于区分
-          lineWidth: 2,
-          crosshairMarkerVisible: true,
-          crosshairMarkerRadius: 4,
-          crosshairMarkerBackgroundColor: seriesConfig.lumpSum.color,
-          crosshairMarkerBorderColor: '#ffffff',
-          crosshairMarkerBorderWidth: 2,
-
-          priceLineVisible: false, // 完全移除priceLine（最终点的水平线）
-        } as LineSeriesOptions);
-        lumpSumSeries.setData(lumpSumData);
-        seriesRef.current.push(lumpSumSeries);
+        if (seriesVisibility.lumpSumReturn) {
+          const lumpSumReturnSeries = chart.addSeries(LineSeries, {
+            color: seriesConfig.lumpSumReturn.color,
+            lineWidth: 2,
+            crosshairMarkerVisible: true,
+            crosshairMarkerRadius: 4,
+            crosshairMarkerBackgroundColor: seriesConfig.lumpSumReturn.color,
+            crosshairMarkerBorderColor: '#ffffff',
+            crosshairMarkerBorderWidth: 2,
+            priceLineVisible: false,
+          } as LineSeriesOptions);
+          lumpSumReturnSeries.setData(seriesData.lumpSumReturn || []);
+          seriesRef.current.push(lumpSumReturnSeries);
+        }
       }
     } else {
-      // 收益率视图 - 添加定投和一次性投入的收益率曲线对比
-      if (seriesVisibility.return) {
-        const returnSeries = chart.addSeries(BaselineSeries, {
-          baseValue: { type: 'price', price: 0 },
-          topLineColor: seriesConfig.return.color,
-          topFillColor1: 'rgba(78, 205, 196, 0.3)',
-          topFillColor2: 'rgba(78, 205, 196, 0.05)',
-          bottomLineColor: '#FF6B6B',
-          bottomFillColor1: 'rgba(255, 107, 107, 0.3)',
-          bottomFillColor2: 'rgba(255, 107, 107, 0.05)',
-          lineWidth: 2,
-          crosshairMarkerVisible: true,
-          crosshairMarkerRadius: 4,
-          crosshairMarkerBackgroundColor: seriesConfig.return.color,
-          crosshairMarkerBorderColor: '#ffffff',
-          crosshairMarkerBorderWidth: 2,
+      // 多基金模式
+      funds.forEach((fund, fundIndex) => {
+        const fundPrefix = `fund${fundIndex + 1}`;
 
-          priceLineVisible: false, // 完全移除priceLine（最终点的水平线）
-        } as any);
-        returnSeries.setData(returnData);
-        seriesRef.current.push(returnSeries);
-      }
+        if (mode === 'multi-dca') {
+          // 多基金定投模式
+          if (chartView === 'cost') {
+            // 成本视图：显示当前价值和累计投入
+            const valueConfig = getMultiFundSeriesConfig(fundIndex, 'value');
+            if (seriesVisibility[`${fundPrefix}_value`]) {
+              const valueSeries = chart.addSeries(LineSeries, {
+                color: valueConfig.color,
+                lineWidth: 2,
+                crosshairMarkerVisible: true,
+                crosshairMarkerRadius: 4,
+                crosshairMarkerBackgroundColor: valueConfig.color,
+                crosshairMarkerBorderColor: '#ffffff',
+                crosshairMarkerBorderWidth: 2,
+                priceLineVisible: false,
+              } as LineSeriesOptions);
+              valueSeries.setData(seriesData[`${fundPrefix}_currentValue`] || []);
+              seriesRef.current.push(valueSeries);
+            }
 
-      // 添加一次性投入年化收益率曲线
-      if (seriesVisibility.lumpSumReturn) {
-        const lumpSumReturnSeries = chart.addSeries(LineSeries, {
-          color: seriesConfig.lumpSumReturn.color, // 紫色，便于区分
-          lineWidth: 2,
-          crosshairMarkerVisible: true,
-          crosshairMarkerRadius: 4,
-          crosshairMarkerBackgroundColor: seriesConfig.lumpSumReturn.color,
-          crosshairMarkerBorderColor: '#ffffff',
-          crosshairMarkerBorderWidth: 2,
-
-          priceLineVisible: false, // 完全移除priceLine（最终点的水平线）
-        } as LineSeriesOptions);
-        lumpSumReturnSeries.setData(lumpSumReturnData);
-        seriesRef.current.push(lumpSumReturnSeries);
-      }
+            const investmentConfig = getMultiFundSeriesConfig(fundIndex, 'investment');
+            if (seriesVisibility[`${fundPrefix}_investment`]) {
+              const investmentSeries = chart.addSeries(LineSeries, {
+                color: investmentConfig.color,
+                lineWidth: 2,
+                lineStyle: LineStyle.Dashed,
+                crosshairMarkerVisible: true,
+                crosshairMarkerRadius: 4,
+                crosshairMarkerBackgroundColor: investmentConfig.color,
+                crosshairMarkerBorderColor: '#ffffff',
+                crosshairMarkerBorderWidth: 2,
+                priceLineVisible: false,
+              } as LineSeriesOptions);
+              investmentSeries.setData(seriesData[`${fundPrefix}_totalInvestment`] || []);
+              seriesRef.current.push(investmentSeries);
+            }
+          } else {
+            // 收益率视图
+            const returnConfig = getMultiFundSeriesConfig(fundIndex, 'return');
+            if (seriesVisibility[`${fundPrefix}_return`]) {
+              const returnSeries = chart.addSeries(BaselineSeries, {
+                baseValue: { type: 'price', price: 0 },
+                topLineColor: returnConfig.color,
+                topFillColor1: `${returnConfig.color}33`,
+                topFillColor2: `${returnConfig.color}0D`,
+                bottomLineColor: '#FF6B6B',
+                bottomFillColor1: 'rgba(255, 107, 107, 0.3)',
+                bottomFillColor2: 'rgba(255, 107, 107, 0.05)',
+                lineWidth: 2,
+                crosshairMarkerVisible: true,
+                crosshairMarkerRadius: 4,
+                crosshairMarkerBackgroundColor: returnConfig.color,
+                crosshairMarkerBorderColor: '#ffffff',
+                crosshairMarkerBorderWidth: 2,
+                priceLineVisible: false,
+              } as any);
+              returnSeries.setData(seriesData[`${fundPrefix}_return`] || []);
+              seriesRef.current.push(returnSeries);
+            }
+          }
+        } else if (mode === 'multi-lumpsum') {
+          // 多基金一次性投入模式
+          if (chartView === 'cost') {
+            const lumpSumConfig = getMultiFundSeriesConfig(fundIndex, 'lumpSum');
+            if (seriesVisibility[`${fundPrefix}_lumpSum`]) {
+              const lumpSumSeries = chart.addSeries(LineSeries, {
+                color: lumpSumConfig.color,
+                lineWidth: 2,
+                crosshairMarkerVisible: true,
+                crosshairMarkerRadius: 4,
+                crosshairMarkerBackgroundColor: lumpSumConfig.color,
+                crosshairMarkerBorderColor: '#ffffff',
+                crosshairMarkerBorderWidth: 2,
+                priceLineVisible: false,
+              } as LineSeriesOptions);
+              lumpSumSeries.setData(seriesData[`${fundPrefix}_lumpSum`] || []);
+              seriesRef.current.push(lumpSumSeries);
+            }
+          } else {
+            const lumpSumReturnConfig = getMultiFundSeriesConfig(fundIndex, 'lumpSumReturn');
+            if (seriesVisibility[`${fundPrefix}_lumpSumReturn`]) {
+              const lumpSumReturnSeries = chart.addSeries(BaselineSeries, {
+                baseValue: { type: 'price', price: 0 },
+                topLineColor: lumpSumReturnConfig.color,
+                topFillColor1: `${lumpSumReturnConfig.color}33`,
+                topFillColor2: `${lumpSumReturnConfig.color}0D`,
+                bottomLineColor: '#FF6B6B',
+                bottomFillColor1: 'rgba(255, 107, 107, 0.3)',
+                bottomFillColor2: 'rgba(255, 107, 107, 0.05)',
+                lineWidth: 2,
+                crosshairMarkerVisible: true,
+                crosshairMarkerRadius: 4,
+                crosshairMarkerBackgroundColor: lumpSumReturnConfig.color,
+                crosshairMarkerBorderColor: '#ffffff',
+                crosshairMarkerBorderWidth: 2,
+                priceLineVisible: false,
+              } as any);
+              lumpSumReturnSeries.setData(seriesData[`${fundPrefix}_lumpSumReturn`] || []);
+              seriesRef.current.push(lumpSumReturnSeries);
+            }
+          }
+        }
+      });
     }
 
     // 设置工具提示（只在有系列数据时设置）
@@ -651,7 +866,7 @@ export default function InvestmentChart({
     return () => {
       chart.timeScale().unsubscribeVisibleTimeRangeChange(handleVisibleTimeRangeChange);
     };
-  }, [chartView, isChartReady, convertData, data, onZoomChange, brushStartIndex, brushEndIndex, setupTooltip, seriesVisibility]);
+  }, [chartView, isChartReady, convertData, data, onZoomChange, brushStartIndex, brushEndIndex, setupTooltip, seriesVisibility, mode, funds]);
 
   // 处理窗口大小变化
   useEffect(() => {
@@ -879,75 +1094,161 @@ export default function InvestmentChart({
           }}
         >
           <div className="space-y-2">
-            {chartView === 'cost' ? (
-              <>
-                <button
-                  onClick={() => toggleSeriesVisibility('cost')}
-                  className={`flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
-                    seriesVisibility.cost ? 'opacity-100' : 'opacity-50'
-                  }`}
-                >
-                  <div
-                    className="w-3 h-0.5 rounded"
-                    style={{ backgroundColor: seriesConfig.cost.color }}
-                  />
-                  <span className="text-gray-200">{seriesConfig.cost.name}</span>
-                </button>
+            {mode === 'single' ? (
+              chartView === 'cost' ? (
+                <>
+                  <button
+                    onClick={() => toggleSeriesVisibility('cost')}
+                    className={`flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
+                      seriesVisibility.cost ? 'opacity-100' : 'opacity-50'
+                    }`}
+                  >
+                    <div
+                      className="w-3 h-0.5 rounded"
+                      style={{ backgroundColor: seriesConfig.cost.color }}
+                    />
+                    <span className="text-gray-200">{seriesConfig.cost.name}</span>
+                  </button>
 
-                <button
-                  onClick={() => toggleSeriesVisibility('value')}
-                  className={`flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
-                    seriesVisibility.value ? 'opacity-100' : 'opacity-50'
-                  }`}
-                >
-                  <div
-                    className="w-3 h-0.5 rounded"
-                    style={{ backgroundColor: seriesConfig.value.color }}
-                  />
-                  <span className="text-gray-200">{seriesConfig.value.name}</span>
-                </button>
+                  <button
+                    onClick={() => toggleSeriesVisibility('value')}
+                    className={`flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
+                      seriesVisibility.value ? 'opacity-100' : 'opacity-50'
+                    }`}
+                  >
+                    <div
+                      className="w-3 h-0.5 rounded"
+                      style={{ backgroundColor: seriesConfig.value.color }}
+                    />
+                    <span className="text-gray-200">{seriesConfig.value.name}</span>
+                  </button>
 
-                <button
-                  onClick={() => toggleSeriesVisibility('lumpSum')}
-                  className={`flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
-                    seriesVisibility.lumpSum ? 'opacity-100' : 'opacity-50'
-                  }`}
-                >
-                  <div
-                    className="w-3 h-0.5 rounded"
-                    style={{ backgroundColor: seriesConfig.lumpSum.color }}
-                  />
-                  <span className="text-gray-200">{seriesConfig.lumpSum.name}</span>
-                </button>
-              </>
+                  <button
+                    onClick={() => toggleSeriesVisibility('lumpSum')}
+                    className={`flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
+                      seriesVisibility.lumpSum ? 'opacity-100' : 'opacity-50'
+                    }`}
+                  >
+                    <div
+                      className="w-3 h-0.5 rounded"
+                      style={{ backgroundColor: seriesConfig.lumpSum.color }}
+                    />
+                    <span className="text-gray-200">{seriesConfig.lumpSum.name}</span>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => toggleSeriesVisibility('return')}
+                    className={`flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
+                      seriesVisibility.return ? 'opacity-100' : 'opacity-50'
+                    }`}
+                  >
+                    <div
+                      className="w-3 h-0.5 rounded"
+                      style={{ backgroundColor: seriesConfig.return.color }}
+                    />
+                    <span className="text-gray-200">{seriesConfig.return.name}</span>
+                  </button>
+
+                  <button
+                    onClick={() => toggleSeriesVisibility('lumpSumReturn')}
+                    className={`flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
+                      seriesVisibility.lumpSumReturn ? 'opacity-100' : 'opacity-50'
+                    }`}
+                  >
+                    <div
+                      className="w-3 h-0.5 rounded"
+                      style={{ backgroundColor: seriesConfig.lumpSumReturn.color }}
+                    />
+                    <span className="text-gray-200">{seriesConfig.lumpSumReturn.name}</span>
+                  </button>
+                </>
+              )
             ) : (
-              <>
-                <button
-                  onClick={() => toggleSeriesVisibility('return')}
-                  className={`flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
-                    seriesVisibility.return ? 'opacity-100' : 'opacity-50'
-                  }`}
-                >
-                  <div
-                    className="w-3 h-0.5 rounded"
-                    style={{ backgroundColor: seriesConfig.return.color }}
-                  />
-                  <span className="text-gray-200">{seriesConfig.return.name}</span>
-                </button>
+              // 多基金模式的图例
+              funds.map((fund, fundIndex) => {
+                const fundPrefix = `fund${fundIndex + 1}`;
+                const fundCode = fund.code || `基金${fundIndex + 1}`;
+                const fundColor = getFundColor(fundIndex);
 
-                <button
-                  onClick={() => toggleSeriesVisibility('lumpSumReturn')}
-                  className={`flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
-                    seriesVisibility.lumpSumReturn ? 'opacity-100' : 'opacity-50'
-                  }`}
-                >
-                  <div
-                    className="w-3 h-0.5 rounded"
-                    style={{ backgroundColor: seriesConfig.lumpSumReturn.color }}
-                  />
-                  <span className="text-gray-200">{seriesConfig.lumpSumReturn.name}</span>
-                </button>
-              </>
+                if (mode === 'multi-dca') {
+                  return chartView === 'cost' ? (
+                    <div key={fundIndex} className="space-y-1">
+                      <button
+                        onClick={() => toggleSeriesVisibility(`${fundPrefix}_value` as any)}
+                        className={`flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
+                          seriesVisibility[`${fundPrefix}_value`] ? 'opacity-100' : 'opacity-50'
+                        }`}
+                      >
+                        <div
+                          className="w-3 h-0.5 rounded"
+                          style={{ backgroundColor: fundColor }}
+                        />
+                        <span className="text-gray-200">{fundCode} 当前价值</span>
+                      </button>
+
+                      <button
+                        onClick={() => toggleSeriesVisibility(`${fundPrefix}_investment` as any)}
+                        className={`flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
+                          seriesVisibility[`${fundPrefix}_investment`] ? 'opacity-100' : 'opacity-50'
+                        }`}
+                      >
+                        <div
+                          className="w-3 h-0.5 rounded"
+                          style={{ backgroundColor: fundColor, borderStyle: 'dashed' }}
+                        />
+                        <span className="text-gray-200">{fundCode} 累计投入</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      key={fundIndex}
+                      onClick={() => toggleSeriesVisibility(`${fundPrefix}_return` as any)}
+                      className={`flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
+                        seriesVisibility[`${fundPrefix}_return`] ? 'opacity-100' : 'opacity-50'
+                      }`}
+                    >
+                      <div
+                        className="w-3 h-0.5 rounded"
+                        style={{ backgroundColor: fundColor }}
+                      />
+                      <span className="text-gray-200">{fundCode} 收益率</span>
+                    </button>
+                  );
+                } else if (mode === 'multi-lumpsum') {
+                  return chartView === 'cost' ? (
+                    <button
+                      key={fundIndex}
+                      onClick={() => toggleSeriesVisibility(`${fundPrefix}_lumpSum` as any)}
+                      className={`flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
+                        seriesVisibility[`${fundPrefix}_lumpSum`] ? 'opacity-100' : 'opacity-50'
+                      }`}
+                    >
+                      <div
+                        className="w-3 h-0.5 rounded"
+                        style={{ backgroundColor: fundColor }}
+                      />
+                      <span className="text-gray-200">{fundCode} 一次性</span>
+                    </button>
+                  ) : (
+                    <button
+                      key={fundIndex}
+                      onClick={() => toggleSeriesVisibility(`${fundPrefix}_lumpSumReturn` as any)}
+                      className={`flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
+                        seriesVisibility[`${fundPrefix}_lumpSumReturn`] ? 'opacity-100' : 'opacity-50'
+                      }`}
+                    >
+                      <div
+                        className="w-3 h-0.5 rounded"
+                        style={{ backgroundColor: fundColor }}
+                      />
+                      <span className="text-gray-200">{fundCode} 收益率</span>
+                    </button>
+                  );
+                }
+                return null;
+              })
             )}
           </div>
         </div>
