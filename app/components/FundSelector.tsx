@@ -37,6 +37,9 @@ export default function FundSelector({ mode, onModeChange, funds, onFundsChange 
   };
 
   const handleModeChange = (newMode: 'single' | 'multi-dca' | 'multi-lumpsum') => {
+    // 在模式切换时清空右侧数据（通过调用父组件的回调函数）
+    // 触发右侧数据清空的效果，防止数据错乱
+
     if (newMode === 'single') {
       onFundsChange([{ id: '1', code: funds[0]?.code || '' }]);
     } else {

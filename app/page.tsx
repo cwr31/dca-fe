@@ -98,6 +98,17 @@ export default function Home() {
   const [chartData, setChartData] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [investmentRecords, setInvestmentRecords] = useState<any[]>([]);
+
+  // 模式切换时清空右侧数据，保留左侧参数
+  const handleModeChange = (newMode: 'single' | 'multi-dca' | 'multi-lumpsum') => {
+    setMode(newMode);
+    // 清空右侧数据，防止数据错乱导致图表渲染错误
+    setChartData([]);
+    setStats(null);
+    setInvestmentRecords([]);
+    setError('');
+  };
+
   const [chartView, setChartView] = useState<'cost' | 'return'>('cost'); // 图表视图：cost=成本收益视图, return=年化收益率视图
   const [brushStartIndex, setBrushStartIndex] = useState<number>(0);
   const [brushEndIndex, setBrushEndIndex] = useState<number>(0);
@@ -382,7 +393,7 @@ export default function Home() {
               </label>
               <FundSelector
                 mode={mode}
-                onModeChange={setMode}
+                onModeChange={handleModeChange}
                 funds={funds}
                 onFundsChange={setFunds}
               />
@@ -763,13 +774,13 @@ export default function Home() {
                                 </span>
                               </td>
                               <td className="px-4 py-2 whitespace-nowrap text-xs text-[#e0e0e0]">
-                                {record.netValue.toFixed(2)}
+                                {record.netValue ? record.netValue.toFixed(2) : '0.00'}
                               </td>
                               <td className="px-4 py-2 whitespace-nowrap text-xs text-[#e0e0e0]">
-                                {Number(record.investmentAmount.toFixed(2)).toLocaleString('zh-CN')}
+                                {record.investmentAmount ? Number(record.investmentAmount.toFixed(2)).toLocaleString('zh-CN') : '0.00'}
                               </td>
                               <td className="px-4 py-2 whitespace-nowrap text-xs text-[#e0e0e0]">
-                                {Number(record.shares.toFixed(2))}
+                                {record.shares ? Number(record.shares.toFixed(2)) : '0.00'}
                               </td>
                             </tr>
                           );
@@ -875,9 +886,9 @@ function handleExportCSV(records: any[], fundCode: string) {
     ...records.map(record => [
       record.date,
       record.type,
-      record.netValue.toFixed(4),
-      record.investmentAmount.toFixed(2),
-      record.shares.toFixed(2)
+      record.netValue ? record.netValue.toFixed(4) : '0.0000',
+      record.investmentAmount ? record.investmentAmount.toFixed(2) : '0.00',
+      record.shares ? record.shares.toFixed(2) : '0.00'
     ].join(','))
   ].join('\n');
 
