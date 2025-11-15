@@ -87,8 +87,8 @@ export default function InvestmentChart({
   });
 
   const seriesVisibility = externalSeriesVisibility ?? internalSeriesVisibility;
-  const chartMinHeight = isMobile ? '300px' : '420px';
-  const chartMaxHeight = isMobile ? '50vh' : '420px';
+  const chartMinHeight = isMobile ? '320px' : '420px';
+  const chartMaxHeight = isMobile ? '55vh' : '420px';
 
   // 系列配置
   const seriesConfig = {
@@ -438,10 +438,11 @@ export default function InvestmentChart({
         visible: true,
         borderColor: 'rgba(51, 51, 51, 0.3)',
         scaleMargins: {
-          top: 0.1,
-          bottom: 0.1,
+          top: isMobile ? 0.15 : 0.1,
+          bottom: isMobile ? 0.15 : 0.1,
         },
         ticksVisible: true,
+        entireTextOnly: false, // 允许部分文本显示
       },
       leftPriceScale: {
         visible: false,
@@ -460,6 +461,10 @@ export default function InvestmentChart({
             return time;
           }
         },
+        fixLeftEdge: true,
+        fixRightEdge: true,
+        lockVisibleTimeRangeOnResize: true,
+        shiftVisibleRangeOnNewBar: false,
       },
       handleScroll: false,
       handleScale: false,
