@@ -364,8 +364,9 @@ export default function InvestmentChart({
         }));
         seriesData['shared_investment'] = sharedInvestmentData;
       }
+    }
 
-      return { seriesData };
+    return { seriesData };
   }, [data, mode, funds]);
 
   // 创建浮动工具提示
