@@ -375,22 +375,44 @@ export default function InvestmentChart({
 
     const tooltip = document.createElement('div');
     tooltip.className = 'lightweight-charts-tooltip';
-    Object.assign(tooltip.style, {
-      position: 'absolute',
-      display: 'none',
-      padding: '8px 12px',
-      fontSize: isMobile ? '11px' : '12px',
-      fontFamily: 'system-ui, -apple-system, sans-serif',
-      backgroundColor: 'rgba(10, 10, 10, 0.95)',
-      color: '#e0e0e0',
-      border: '1px solid #4a9eff',
-      borderRadius: '6px',
-      pointerEvents: 'none',
-      zIndex: '1000',
-      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
-      backdropFilter: 'blur(4px)',
-      maxWidth: '200px',
-    });
+
+    // 移动端优化：更小的字体和更紧凑的布局
+    if (isMobile) {
+      Object.assign(tooltip.style, {
+        position: 'absolute',
+        display: 'none',
+        padding: '6px 8px',
+        fontSize: '10px',
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+        backgroundColor: 'rgba(10, 10, 10, 0.95)',
+        color: '#e0e0e0',
+        border: '1px solid #4a9eff',
+        borderRadius: '4px',
+        pointerEvents: 'none',
+        zIndex: '1000',
+        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
+        backdropFilter: 'blur(4px)',
+        maxWidth: '150px',
+        lineHeight: '1.3'
+      });
+    } else {
+      Object.assign(tooltip.style, {
+        position: 'absolute',
+        display: 'none',
+        padding: '8px 12px',
+        fontSize: '12px',
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+        backgroundColor: 'rgba(10, 10, 10, 0.95)',
+        color: '#e0e0e0',
+        border: '1px solid #4a9eff',
+        borderRadius: '6px',
+        pointerEvents: 'none',
+        zIndex: '1000',
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+        backdropFilter: 'blur(4px)',
+        maxWidth: '200px',
+      });
+    }
 
     chartContainerRef.current.appendChild(tooltip);
     tooltipRef.current = tooltip;
@@ -609,21 +631,30 @@ export default function InvestmentChart({
         ${tooltipContent}
       `;
 
-      // 计算工具提示位置
+      // 计算工具提示位置 - 移动端优化
       const containerRect = chartContainerRef.current!.getBoundingClientRect();
       const chartWidth = containerRect.width;
       const chartHeight = containerRect.height;
 
-      let left = param.point.x - 215;
-      let top = param.point.y - 40;
+      // 移动端和桌面端使用不同的定位策略
+      let left, top;
 
-      // 防止工具提示超出图表边界
-      const tooltipRect = tooltip.getBoundingClientRect();
-      if (left < 0) {
-        left = param.point.x + 15;
-      }
-      if (top < 0) {
-        top = param.point.y + 15;
+      if (isMobile) {
+        // 移动端：固定在图表内部偏左位置，避免超出屏幕
+        left = Math.min(Math.max(param.point.x - 75, 5), chartWidth - 155);
+        top = Math.min(Math.max(param.point.y - 30, 5), chartHeight - 60);
+      } else {
+        // 桌面端：动态计算最佳位置
+        left = param.point.x - 215;
+        top = param.point.y - 40;
+
+        // 防止工具提示超出图表边界
+        if (left < 0) {
+          left = param.point.x + 15;
+        }
+        if (top < 0) {
+          top = param.point.y + 15;
+        }
       }
 
       tooltip.style.left = `${left}px`;
@@ -1024,32 +1055,42 @@ export default function InvestmentChart({
 
     const container = chartContainerRef.current;
     let startY = 0;
+    let startX = 0;
     let isScrolling = false;
+    let isChartPanning = false;
 
     const handleTouchStart = (e: TouchEvent) => {
-      startY = e.touches[0].clientY;
-      isScrolling = false;
+      if (e.touches.length === 1) {
+        startY = e.touches[0].clientY;
+        startX = e.touches[0].clientX;
+        isScrolling = false;
+        isChartPanning = false;
+      }
     };
 
     const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+
       const currentY = e.touches[0].clientY;
-      const deltaY = startY - currentY;
+      const currentX = e.touches[0].clientX;
+      const deltaY = Math.abs(startY - currentY);
+      const deltaX = Math.abs(startX - currentX);
 
-      // 如果垂直移动距离大于水平移动距离，认为是滚动操作
-      if (Math.abs(deltaY) > 10 && !isScrolling) {
+      // 判断是垂直滚动还是水平操作
+      if (deltaY > deltaX && deltaY > 15) {
+        // 垂直滚动，允许页面滚动
         isScrolling = true;
-        // 允许页面滚动，不阻止默认行为
         return;
-      }
-
-      // 如果是图表内部的水平滑动（缩放/平移），则阻止默认行为
-      if (!isScrolling && Math.abs(deltaY) < 10) {
+      } else if (deltaX > deltaY && deltaX > 10) {
+        // 水平移动，可能是图表操作
+        isChartPanning = true;
         e.preventDefault();
       }
     };
 
     const handleTouchEnd = () => {
       isScrolling = false;
+      isChartPanning = false;
     };
 
     container.addEventListener('touchstart', handleTouchStart, { passive: true });
@@ -1065,7 +1106,7 @@ export default function InvestmentChart({
 
   return (
     <div
-      className="w-full relative"
+      className={`w-full relative ${isMobile ? 'chart-container-mobile touch-scroll no-select' : ''}`}
       style={{
         minHeight: chartMinHeight,
         maxHeight: chartMaxHeight,
@@ -1074,13 +1115,15 @@ export default function InvestmentChart({
     >
       <div
         ref={chartContainerRef}
-        className="w-full h-full"
+        className={`w-full h-full ${isMobile ? 'gpu-accelerated hardware-accelerated' : ''}`}
         style={{
           minHeight: chartMinHeight,
           maxHeight: chartMaxHeight,
           height: '100%',
           touchAction: 'pan-y', // 允许垂直滚动
-          WebkitOverflowScrolling: 'touch' // iOS平滑滚动
+          WebkitOverflowScrolling: 'touch', // iOS平滑滚动
+          willChange: 'transform', // 性能优化
+          transform: 'translateZ(0)' // 强制GPU加速
         }}
         onDoubleClick={() => {
           if (isChartReady) {
@@ -1101,88 +1144,94 @@ export default function InvestmentChart({
         />
       )}
 
-      {/* 图例 - 简化版，仅在小屏幕上显示 */}
-      {isChartReady && isMobile && (
-        <div className="absolute bottom-2 left-2 bg-[rgba(26,26,26,0.9)] rounded p-1.5 z-10 backdrop-blur-sm border border-[#2a2a2a]"
+      // 图例 - 移动端优化版本
+      {isChartReady && (
+        <div className={`absolute ${
+          isMobile
+            ? 'bottom-1 left-1 bg-[rgba(26,26,26,0.95)] rounded p-1 z-10 backdrop-blur-sm border border-[#2a2a2a]'
+            : 'bottom-2 left-2 bg-[rgba(26,26,26,0.9)] rounded p-2 z-10 backdrop-blur-sm border border-[#2a2a2a]'
+        }`}
           style={{
-            fontSize: '10px',
-            fontFamily: 'system-ui, -apple-system, sans-serif'
+            fontSize: isMobile ? '9px' : '11px',
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            maxHeight: isMobile ? '40vh' : 'auto',
+            overflowY: isMobile ? 'auto' : 'visible'
           }}
         >
-          <div className="space-y-2">
+          <div className={`space-${isMobile ? '1' : '2'}`}>
             {mode === 'single' ? (
               chartView === 'cost' ? (
                 <>
                   <button
                     onClick={() => toggleSeriesVisibility('cost')}
-                    className={`flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
+                    className={`flex items-center gap-${isMobile ? '1' : '2'} px-${isMobile ? '1' : '2'} py-${isMobile ? '0.5' : '1'} rounded transition-all duration-200 hover:bg-gray-700 ${
                       seriesVisibility.cost ? 'opacity-100' : 'opacity-50'
                     }`}
                   >
                     <div
-                      className="w-3 h-0.5 rounded"
+                      className={`w-${isMobile ? '2' : '3'} h-0.5 rounded`}
                       style={{ backgroundColor: seriesConfig.cost.color }}
                     />
-                    <span className="text-gray-200">{seriesConfig.cost.name}</span>
+                    <span className="text-gray-200 text-xs">{isMobile ? '投入' : seriesConfig.cost.name}</span>
                   </button>
 
                   <button
                     onClick={() => toggleSeriesVisibility('value')}
-                    className={`flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
+                    className={`flex items-center gap-${isMobile ? '1' : '2'} px-${isMobile ? '1' : '2'} py-${isMobile ? '0.5' : '1'} rounded transition-all duration-200 hover:bg-gray-700 ${
                       seriesVisibility.value ? 'opacity-100' : 'opacity-50'
                     }`}
                   >
                     <div
-                      className="w-3 h-0.5 rounded"
+                      className={`w-${isMobile ? '2' : '3'} h-0.5 rounded`}
                       style={{ backgroundColor: seriesConfig.value.color }}
                     />
-                    <span className="text-gray-200">{seriesConfig.value.name}</span>
+                    <span className="text-gray-200 text-xs">{isMobile ? '价值' : seriesConfig.value.name}</span>
                   </button>
 
                   <button
                     onClick={() => toggleSeriesVisibility('lumpSum')}
-                    className={`flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
+                    className={`flex items-center gap-${isMobile ? '1' : '2'} px-${isMobile ? '1' : '2'} py-${isMobile ? '0.5' : '1'} rounded transition-all duration-200 hover:bg-gray-700 ${
                       seriesVisibility.lumpSum ? 'opacity-100' : 'opacity-50'
                     }`}
                   >
                     <div
-                      className="w-3 h-0.5 rounded"
+                      className={`w-${isMobile ? '2' : '3'} h-0.5 rounded`}
                       style={{ backgroundColor: seriesConfig.lumpSum.color }}
                     />
-                    <span className="text-gray-200">{seriesConfig.lumpSum.name}</span>
+                    <span className="text-gray-200 text-xs">{isMobile ? '一次性' : seriesConfig.lumpSum.name}</span>
                   </button>
                 </>
               ) : (
                 <>
                   <button
                     onClick={() => toggleSeriesVisibility('return')}
-                    className={`flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
+                    className={`flex items-center gap-${isMobile ? '1' : '2'} px-${isMobile ? '1' : '2'} py-${isMobile ? '0.5' : '1'} rounded transition-all duration-200 hover:bg-gray-700 ${
                       seriesVisibility.return ? 'opacity-100' : 'opacity-50'
                     }`}
                   >
                     <div
-                      className="w-3 h-0.5 rounded"
+                      className={`w-${isMobile ? '2' : '3'} h-0.5 rounded`}
                       style={{ backgroundColor: seriesConfig.return.color }}
                     />
-                    <span className="text-gray-200">{seriesConfig.return.name}</span>
+                    <span className="text-gray-200 text-xs">{isMobile ? '定投收益' : seriesConfig.return.name}</span>
                   </button>
 
                   <button
                     onClick={() => toggleSeriesVisibility('lumpSumReturn')}
-                    className={`flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
+                    className={`flex items-center gap-${isMobile ? '1' : '2'} px-${isMobile ? '1' : '2'} py-${isMobile ? '0.5' : '1'} rounded transition-all duration-200 hover:bg-gray-700 ${
                       seriesVisibility.lumpSumReturn ? 'opacity-100' : 'opacity-50'
                     }`}
                   >
                     <div
-                      className="w-3 h-0.5 rounded"
+                      className={`w-${isMobile ? '2' : '3'} h-0.5 rounded`}
                       style={{ backgroundColor: seriesConfig.lumpSumReturn.color }}
                     />
-                    <span className="text-gray-200">{seriesConfig.lumpSumReturn.name}</span>
+                    <span className="text-gray-200 text-xs">{isMobile ? '一次性收益' : seriesConfig.lumpSumReturn.name}</span>
                   </button>
                 </>
               )
             ) : (
-              // 多基金模式的图例
+              // 多基金模式的图例 - 移动端优化
               funds.map((fund, fundIndex) => {
                 const fundPrefix = `fund${fundIndex + 1}`;
                 const fundCode = fund.code || `基金${fundIndex + 1}`;
@@ -1190,46 +1239,46 @@ export default function InvestmentChart({
 
                 if (mode === 'multi-dca') {
                   return chartView === 'cost' ? (
-                    <div key={fundIndex} className="space-y-1">
+                    <div key={fundIndex} className={`space-${isMobile ? '0.5' : '1'}`}>
                       <button
                         onClick={() => toggleSeriesVisibility(`${fundPrefix}_value` as any)}
-                        className={`flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
+                        className={`flex items-center gap-${isMobile ? '1' : '2'} px-${isMobile ? '1' : '2'} py-${isMobile ? '0.5' : '1'} rounded transition-all duration-200 hover:bg-gray-700 ${
                           seriesVisibility[`${fundPrefix}_value`] ? 'opacity-100' : 'opacity-50'
                         }`}
                       >
                         <div
-                          className="w-3 h-0.5 rounded"
+                          className={`w-${isMobile ? '2' : '3'} h-0.5 rounded`}
                           style={{ backgroundColor: fundColor }}
                         />
-                        <span className="text-gray-200">{fundCode} 当前价值</span>
+                        <span className="text-gray-200 text-xs">{isMobile ? fundCode : `${fundCode} 当前价值`}</span>
                       </button>
 
                       <button
                         onClick={() => toggleSeriesVisibility(`${fundPrefix}_investment` as any)}
-                        className={`flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
+                        className={`flex items-center gap-${isMobile ? '1' : '2'} px-${isMobile ? '1' : '2'} py-${isMobile ? '0.5' : '1'} rounded transition-all duration-200 hover:bg-gray-700 ${
                           seriesVisibility[`${fundPrefix}_investment`] ? 'opacity-100' : 'opacity-50'
                         }`}
                       >
                         <div
-                          className="w-3 h-0.5 rounded"
+                          className={`w-${isMobile ? '2' : '3'} h-0.5 rounded`}
                           style={{ backgroundColor: fundColor, borderStyle: 'dashed' }}
                         />
-                        <span className="text-gray-200">{fundCode} 累计投入</span>
+                        <span className="text-gray-200 text-xs">{isMobile ? `${fundCode}投入` : `${fundCode} 累计投入`}</span>
                       </button>
                     </div>
                   ) : (
                     <button
                       key={fundIndex}
                       onClick={() => toggleSeriesVisibility(`${fundPrefix}_return` as any)}
-                      className={`flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
+                      className={`flex items-center gap-${isMobile ? '1' : '2'} px-${isMobile ? '1' : '2'} py-${isMobile ? '0.5' : '1'} rounded transition-all duration-200 hover:bg-gray-700 ${
                         seriesVisibility[`${fundPrefix}_return`] ? 'opacity-100' : 'opacity-50'
                       }`}
                     >
                       <div
-                        className="w-3 h-0.5 rounded"
+                        className={`w-${isMobile ? '2' : '3'} h-0.5 rounded`}
                         style={{ backgroundColor: fundColor }}
                       />
-                      <span className="text-gray-200">{fundCode} 收益率</span>
+                      <span className="text-gray-200 text-xs">{isMobile ? fundCode : `${fundCode} 收益率`}</span>
                     </button>
                   );
                 } else if (mode === 'multi-lumpsum') {
@@ -1237,29 +1286,29 @@ export default function InvestmentChart({
                     <button
                       key={fundIndex}
                       onClick={() => toggleSeriesVisibility(`${fundPrefix}_lumpSum` as any)}
-                      className={`flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
+                      className={`flex items-center gap-${isMobile ? '1' : '2'} px-${isMobile ? '1' : '2'} py-${isMobile ? '0.5' : '1'} rounded transition-all duration-200 hover:bg-gray-700 ${
                         seriesVisibility[`${fundPrefix}_lumpSum`] ? 'opacity-100' : 'opacity-50'
                       }`}
                     >
                       <div
-                        className="w-3 h-0.5 rounded"
+                        className={`w-${isMobile ? '2' : '3'} h-0.5 rounded`}
                         style={{ backgroundColor: fundColor }}
                       />
-                      <span className="text-gray-200">{fundCode} 一次性</span>
+                      <span className="text-gray-200 text-xs">{isMobile ? fundCode : `${fundCode} 一次性`}</span>
                     </button>
                   ) : (
                     <button
                       key={fundIndex}
                       onClick={() => toggleSeriesVisibility(`${fundPrefix}_lumpSumReturn` as any)}
-                      className={`flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
+                      className={`flex items-center gap-${isMobile ? '1' : '2'} px-${isMobile ? '1' : '2'} py-${isMobile ? '0.5' : '1'} rounded transition-all duration-200 hover:bg-gray-700 ${
                         seriesVisibility[`${fundPrefix}_lumpSumReturn`] ? 'opacity-100' : 'opacity-50'
                       }`}
                     >
                       <div
-                        className="w-3 h-0.5 rounded"
+                        className={`w-${isMobile ? '2' : '3'} h-0.5 rounded`}
                         style={{ backgroundColor: fundColor }}
                       />
-                      <span className="text-gray-200">{fundCode} 收益率</span>
+                      <span className="text-gray-200 text-xs">{isMobile ? fundCode : `${fundCode} 收益率`}</span>
                     </button>
                   );
                 }
@@ -1269,18 +1318,18 @@ export default function InvestmentChart({
 
             {/* 为多基金定投模式添加共用的累计投入线图例 */}
             {mode === 'multi-dca' && chartView === 'cost' && (
-              <div className="border-t border-gray-600 pt-2 mt-2">
+              <div className={`border-t border-gray-600 pt-${isMobile ? '1' : '2'} mt-${isMobile ? '1' : '2'}`}>
                 <button
                   onClick={() => toggleSeriesVisibility('shared_investment' as any)}
-                  className={`flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
+                  className={`flex items-center gap-${isMobile ? '1' : '2'} px-${isMobile ? '1' : '2'} py-${isMobile ? '0.5' : '1'} rounded transition-all duration-200 hover:bg-gray-700 ${
                     seriesVisibility.shared_investment ? 'opacity-100' : 'opacity-50'
                   }`}
                 >
                   <div
-                    className="w-3 h-0.5 rounded"
+                    className={`w-${isMobile ? '2' : '3'} h-0.5 rounded`}
                     style={{ backgroundColor: seriesConfig.shared_investment.color, borderStyle: 'dashed' }}
                   />
-                  <span className="text-gray-200">{seriesConfig.shared_investment.name}</span>
+                  <span className="text-gray-200 text-xs">{isMobile ? '投入' : seriesConfig.shared_investment.name}</span>
                 </button>
               </div>
             )}
