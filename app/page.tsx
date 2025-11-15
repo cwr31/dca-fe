@@ -379,8 +379,9 @@ export default function Home() {
 
   return (
     <div className="w-full min-h-screen bg-gradient-to-br from-[#0a0a0a] via-[#0f0f0f] to-[#0a0a0a]">
-      <div className="flex min-h-screen w-full relative">
-        {/* 左侧参数设置面板 */}
+      {/* 桌面端布局：左右分栏 */}
+      <div className="hidden md:flex min-h-screen w-full relative">
+        {/* 左侧参数设置面板 - 桌面端 */}
         <div
           className="w-[340px] min-w-[340px] h-screen bg-gradient-to-b from-[#1a1a1a] to-[#151515] border-r border-[#2a2a2a] flex flex-col overflow-y-auto overflow-x-hidden custom-scrollbar shadow-2xl flex-shrink-0 fixed"
         >
@@ -600,7 +601,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* 右侧图表展示区域 */}
+        {/* 右侧图表展示区域 - 桌面端 */}
         <div className="ml-[340px] flex-1 bg-gradient-to-br from-[#0f0f0f] via-[#0a0a0a] to-[#0f0f0f] min-h-screen">
           {chartData.length > 0 ? (
             <div className="w-full flex flex-col p-5 gap-6 min-h-screen animate-in fade-in duration-500">
@@ -866,6 +867,434 @@ export default function Home() {
                   <div className="w-2 h-2 rounded-full bg-[#4a9eff] animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                   <div className="w-2 h-2 rounded-full bg-[#4a9eff] animate-bounce" style={{ animationDelay: '0.4s' }}></div>
                 </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 移动端布局：垂直堆叠 */}
+      <div className="md:hidden flex flex-col min-h-screen">
+        {/* 移动端顶部导航 */}
+        <div className="sticky top-0 z-50 bg-gradient-to-b from-[#1a1a1a] to-[#151515] border-b border-[#2a2a2a] p-4 flex-shrink-0">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+              <span>📊</span>
+              <span>基金回测</span>
+            </h2>
+            <button
+              onClick={() => {
+                // 切换参数面板显示
+                const paramPanel = document.getElementById('mobile-param-panel');
+                if (paramPanel) {
+                  paramPanel.classList.toggle('hidden');
+                }
+              }}
+              className="p-2 bg-[#4a9eff] rounded-lg text-white"
+            >
+              ⚙️
+            </button>
+          </div>
+        </div>
+
+        {/* 移动端参数设置面板 */}
+        <div id="mobile-param-panel" className="bg-gradient-to-b from-[#1a1a1a] to-[#151515] border-b border-[#2a2a2a] p-4 space-y-4 flex-shrink-0">
+          <div className="px-2 py-4 space-y-4">
+            <div className="group">
+              <label htmlFor="fundCode" className="block mb-2 text-[#b0b0b0] font-medium text-sm flex items-center gap-2">
+                <span className="text-[#4a9eff]">📊</span>
+                基金选择
+              </label>
+              <FundSelector
+                mode={mode}
+                onModeChange={handleModeChange}
+                funds={funds}
+                onFundsChange={setFunds}
+              />
+            </div>
+
+            <div className="group">
+              <label htmlFor="investmentAmount" className="block mb-2 text-[#b0b0b0] font-medium text-sm flex items-center gap-2">
+                <span className="text-[#4a9eff]">💰</span>
+                每次投资金额（元）
+              </label>
+              <input
+                id="investmentAmount"
+                type="number"
+                value={investmentAmount}
+                onChange={(e) => setInvestmentAmount(e.target.value)}
+                min="1"
+                step="0.01"
+                className="w-full px-4 py-3 border border-[#3a3a3a] rounded-lg text-sm transition-all duration-200 bg-[#252525] text-[#e0e0e0] placeholder:text-[#666] focus:outline-none focus:border-[#4a9eff] focus:bg-[#2a2a2a] focus:shadow-[0_0_0_3px_rgba(74,158,255,0.1)] hover:border-[#4a4a4a]"
+                tabIndex={0}
+                aria-label="每次投资金额输入框"
+              />
+            </div>
+
+            <div className="group">
+              <label htmlFor="frequency" className="block mb-2 text-[#b0b0b0] font-medium text-sm flex items-center gap-2">
+                <span className="text-[#4a9eff]">⏰</span>
+                定投频率
+              </label>
+              <select
+                id="frequency"
+                value={frequency}
+                onChange={(e) => setFrequency(e.target.value as 'daily' | 'weekly' | 'monthly')}
+                className="w-full px-4 py-3 border border-[#3a3a3a] rounded-lg text-sm transition-all duration-200 bg-[#252525] text-[#e0e0e0] focus:outline-none focus:border-[#4a9eff] focus:bg-[#2a2a2a] focus:shadow-[0_0_0_3px_rgba(74,158,255,0.1)] hover:border-[#4a4a4a] cursor-pointer"
+                tabIndex={0}
+                aria-label="定投频率选择"
+              >
+                <option value="daily" className="bg-[#252525] text-[#e0e0e0]">每日</option>
+                <option value="weekly" className="bg-[#252525] text-[#e0e0e0]">每周</option>
+                <option value="monthly" className="bg-[#252525] text-[#e0e0e0]">每月</option>
+              </select>
+            </div>
+
+            {frequency === 'weekly' && (
+              <div className="group animate-in fade-in slide-in-from-top-2 duration-300">
+                <label htmlFor="weeklyDayOfWeek" className="block mb-2 text-[#b0b0b0] font-medium text-sm flex items-center gap-2">
+                  <span className="text-[#4a9eff]">📅</span>
+                  每周几定投
+                </label>
+                <select
+                  id="weeklyDayOfWeek"
+                  value={weeklyDayOfWeek}
+                  onChange={(e) => setWeeklyDayOfWeek(parseInt(e.target.value))}
+                  className="w-full px-4 py-3 border border-[#3a3a3a] rounded-lg text-sm transition-all duration-200 bg-[#252525] text-[#e0e0e0] focus:outline-none focus:border-[#4a9eff] focus:bg-[#2a2a2a] focus:shadow-[0_0_0_3px_rgba(74,158,255,0.1)] hover:border-[#4a4a4a] cursor-pointer"
+                  tabIndex={0}
+                  aria-label="每周定投日期选择"
+                >
+                  <option value="0" className="bg-[#252525] text-[#e0e0e0]">周日</option>
+                  <option value="1" className="bg-[#252525] text-[#e0e0e0]">周一</option>
+                  <option value="2" className="bg-[#252525] text-[#e0e0e0]">周二</option>
+                  <option value="3" className="bg-[#252525] text-[#e0e0e0]">周三</option>
+                  <option value="4" className="bg-[#252525] text-[#e0e0e0]">周四</option>
+                  <option value="5" className="bg-[#252525] text-[#e0e0e0]">周五</option>
+                  <option value="6" className="bg-[#252525] text-[#e0e0e0]">周六</option>
+                </select>
+              </div>
+            )}
+
+            <div className="group">
+              <label htmlFor="startDate" className="block mb-2 text-[#b0b0b0] font-medium text-sm flex items-center gap-2">
+                <span className="text-[#4a9eff]">📆</span>
+                开始日期
+                <span className="text-[#ff4d4f] text-xs">*</span>
+              </label>
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                <button
+                  type="button"
+                  onClick={() => handleQuickDateSelect(1)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleQuickDateSelect(1);
+                    }
+                  }}
+                  className="w-full px-3 py-2 text-xs font-medium rounded-lg bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#2a2a2a] hover:border-[#4a9eff] hover:text-[#4a9eff] active:bg-[#2a2a2a] active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#4a9eff]/50"
+                  tabIndex={0}
+                  aria-label="选择近一年"
+                >
+                  近1年
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickDateSelect(3)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleQuickDateSelect(3);
+                    }
+                  }}
+                  className="w-full px-3 py-2 text-xs font-medium rounded-lg bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#2a2a2a] hover:border-[#4a9eff] hover:text-[#4a9eff] active:bg-[#2a2a2a] active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#4a9eff]/50"
+                  tabIndex={0}
+                  aria-label="选择近3年"
+                >
+                  近3年
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickDateSelect(5)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleQuickDateSelect(5);
+                    }
+                  }}
+                  className="w-full px-3 py-2 text-xs font-medium rounded-lg bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#2a2a2a] hover:border-[#4a9eff] hover:text-[#4a9eff] active:bg-[#2a2a2a] active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#4a9eff]/50"
+                  tabIndex={0}
+                  aria-label="选择近5年"
+                >
+                  近5年
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickDateSelect(10)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleQuickDateSelect(10);
+                    }
+                  }}
+                  className="w-full px-3 py-2 text-xs font-medium rounded-lg bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#2a2a2a] hover:border-[#4a9eff] hover:text-[#4a9eff] active:bg-[#2a2a2a] active:scale-[0.98] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#4a9eff]/50"
+                  tabIndex={0}
+                  aria-label="选择近10年"
+                >
+                  近10年
+                </button>
+              </div>
+              <input
+                id="startDate"
+                type="text"
+                value={startDateInput}
+                onChange={(e) => setStartDateInput(e.target.value)}
+                placeholder="例如：20200101 或 2020-01-01"
+                className="w-full px-4 py-3 border border-[#3a3a3a] rounded-lg transition-all duration-200 bg-[#252525] text-[#e0e0e0] placeholder:text-[#666] focus:outline-none focus:border-[#4a9eff] focus:bg-[#2a2a2a] focus:shadow-[0_0_0_3px_rgba(74,158,255,0.1)] hover:border-[#4a4a4a]"
+                tabIndex={0}
+                aria-label="开始日期输入框"
+                required
+              />
+            </div>
+
+            <div className="group">
+              <label htmlFor="endDate" className="block mb-2 text-[#b0b0b0] font-medium text-sm flex items-center gap-2">
+                <span className="text-[#4a9eff]">📆</span>
+                结束日期（默认今天）
+              </label>
+              <input
+                id="endDate"
+                type="text"
+                value={endDateInput}
+                onChange={(e) => setEndDateInput(e.target.value)}
+                placeholder="例如：20241231 或 2024-12-31"
+                className="w-full px-4 py-3 border border-[#3a3a3a] rounded-lg transition-all duration-200 bg-[#252525] text-[#e0e0e0] placeholder:text-[#666] focus:outline-none focus:border-[#4a9eff] focus:bg-[#2a2a2a] focus:shadow-[0_0_0_3px_rgba(74,158,255,0.1)] hover:border-[#4a4a4a]"
+                tabIndex={0}
+                aria-label="结束日期输入框"
+              />
+            </div>
+
+            <button
+              onClick={async () => {
+                await handleBacktest();
+                // 移动端执行回测后自动隐藏参数面板
+                const paramPanel = document.getElementById('mobile-param-panel');
+                if (paramPanel) {
+                  paramPanel.classList.add('hidden');
+                }
+              }}
+              onKeyDown={async (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  await handleBacktest();
+                  const paramPanel = document.getElementById('mobile-param-panel');
+                  if (paramPanel) {
+                    paramPanel.classList.add('hidden');
+                  }
+                }
+              }}
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-[#4a9eff] via-[#3a8eef] to-[#0066cc] text-white font-semibold cursor-pointer transition-all duration-200 mt-2 hover:translate-y-[-2px] hover:shadow-[0_8px_20px_rgba(74,158,255,0.4)] hover:from-[#5aaeff] hover:to-[#0076dc] active:translate-y-0 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:hover:shadow-none relative overflow-hidden group"
+              tabIndex={0}
+              aria-label="开始回测按钮"
+            >
+              <span className="relative z-10 flex items-center justify-center gap-2">
+                {loading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    <span>计算中...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>🚀</span>
+                    <span>开始回测</span>
+                  </>
+                )}
+              </span>
+              <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>
+            </button>
+
+            {error && (
+              <div className="mt-4 bg-gradient-to-r from-[rgba(255,77,77,0.15)] to-[rgba(255,77,77,0.1)] text-[#ff6b6b] px-4 py-3 rounded-lg border border-[rgba(255,77,77,0.3)] text-sm flex items-start gap-2 animate-in fade-in slide-in-from-top-2 duration-300 shadow-lg">
+                <span className="text-lg flex-shrink-0">⚠️</span>
+                <span className="flex-1">{error}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 移动端结果展示区域 */}
+        <div className="flex-1 bg-gradient-to-br from-[#0f0f0f] via-[#0a0a0a] to-[#0f0f0f] min-h-screen">
+          {chartData.length > 0 ? (
+            <div className="w-full p-4 space-y-4">
+              {/* 移动端统计卡片 */}
+              {stats ? (
+                mode === 'single' ? (
+                  <StatsCards stats={(() => {
+                    const statsData = {
+                      totalPeriods: investmentRecords.length,
+                      totalInvestment: stats.totalInvestment,
+                      averageInvestment: stats.totalInvestment / (investmentRecords.length || 1),
+                      finalAssetValue: stats.currentValue,
+                      dcaProfitRate: stats.profitRate,
+                      dcaAnnualizedReturn: stats.annualizedReturnRate || 0,
+                      lumpSumFinalAsset: stats.totalInvestment * (1 + stats.priceChangePercent / 100),
+                      lumpSumProfitRate: stats.priceChangePercent,
+                      lumpSumAnnualizedReturn: (() => {
+                        const daysDiff = stats.startDate && chartData.length > 0
+                          ? Math.ceil((new Date(chartData[chartData.length - 1].date).getTime() - new Date(stats.startDate).getTime()) / (1000 * 60 * 60 * 24))
+                          : 365;
+                        return daysDiff > 0
+                          ? ((Math.pow(1 + stats.priceChangePercent / 100, 365 / daysDiff) - 1) * 100)
+                          : 0;
+                      })()
+                    };
+
+                    return statsData;
+                  })()} startDate={stats.startDate} endDate={chartData.length > 0 ? chartData[chartData.length - 1].date : undefined} />
+                ) : (
+                  <MultiFundStatsCards
+                    stats={stats}
+                    mode={mode as 'multi-dca' | 'multi-lumpsum'}
+                    funds={funds.filter(f => f.code.trim())}
+                  />
+                )
+              ) : chartData.length > 0 ? (
+                <StatsSkeleton count={4} />
+              ) : null}
+
+              {/* 移动端图表区域 */}
+              <div className="bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl p-0 border border-[#2a2a2a] shadow-2xl"
+                   style={{ height: '400px', overflow: 'hidden', position: 'relative' }}>
+                <div className="flex flex-col gap-3 px-3 py-2 border-b border-[#2a2a2a] bg-gradient-to-r from-[#1a1a1a] to-[#1f1f1f] flex-shrink-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-white text-sm font-semibold truncate flex-1">
+                      {mode === 'single'
+                        ? (chartView === 'cost' ? '收益表' : '收益率表')
+                        : (mode === 'multi-dca'
+                            ? (chartView === 'cost' ? '多基金定投收益对比' : '多基金定投收益率对比')
+                            : (chartView === 'cost' ? '多基金一次性投入收益对比' : '多基金一次性投入收益率对比')
+                          )
+                      }
+                    </h3>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <button
+                        onClick={() => setChartView(chartView === 'cost' ? 'return' : 'cost')}
+                        className="inline-flex items-center rounded-lg border border-[#2a2a2a] bg-[#1f1f1f] px-2 py-1 text-xs font-medium text-[#d0d0d0] shadow-sm hover:bg-[#2a2a2a] hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4a9eff]/70"
+                        aria-label="切换视图"
+                      >
+                        {chartView === 'cost' ? '收益率' : '收益'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <InvestmentChart
+                  data={chartData}
+                  chartView={chartView}
+                  mode={mode}
+                  funds={funds}
+                  onZoomChange={(start, end) => {
+                    setBrushStartIndex(start);
+                    setBrushEndIndex(end);
+                  }}
+                  brushStartIndex={brushStartIndex}
+                  brushEndIndex={brushEndIndex > 0 ? brushEndIndex : (chartData.length > 0 ? chartData.length - 1 : 0)}
+                />
+              </div>
+
+              {/* 移动端定投记录表格 */}
+              {investmentRecords.length > 0 && (
+                <div className="bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl border border-[#2a2a2a] shadow-2xl overflow-hidden">
+                  <div className="px-3 py-2 border-b border-[#2a2a2a] flex items-center justify-between">
+                    <h3 className="text-white text-sm font-bold flex items-center gap-2">
+                      <span className="text-base">📋</span>
+                      定投记录
+                    </h3>
+                    <button
+                      onClick={() => handleExportCSV(investmentRecords, mode === 'single' ? '基金定投' : '多基金定投')}
+                      className="px-2 py-1 text-xs font-medium rounded-lg bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#4a9eff] hover:text-white hover:border-[#4a9eff] transition-all duration-200 active:scale-95 flex items-center gap-1"
+                      title="导出为CSV"
+                      aria-label="导出定投记录为CSV格式"
+                    >
+                      ⬇️ 导出
+                    </button>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead className="sticky top-0 z-10 bg-[#1a1a1a] bg-gradient-to-b from-[#1f1f1f] to-[#1a1a1a]">
+                        <tr className="border-b border-[#2a2a2a]">
+                          <th className="px-2 py-1 text-left text-[10px] font-medium text-[#888] uppercase tracking-wider">日期</th>
+                          <th className="px-2 py-1 text-left text-[10px] font-medium text-[#888] uppercase tracking-wider">类型</th>
+                          <th className="px-2 py-1 text-left text-[10px] font-medium text-[#888] uppercase tracking-wider">净值</th>
+                          <th className="px-2 py-1 text-left text-[10px] font-medium text-[#888] uppercase tracking-wider">金额</th>
+                          <th className="px-2 py-1 text-left text-[10px] font-medium text-[#888] uppercase tracking-wider">份额</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#2a2a2a]">
+                        {investmentRecords.slice(0, 5).map((record: any, index: number) => {
+                          const date = new Date(record.date);
+                          const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+                          const weekday = weekdays[date.getDay()];
+                          return (
+                            <tr key={`${record.date}-${index}`} className="hover:bg-[#1f1f1f] transition-colors">
+                              <td className="px-2 py-1 text-[10px] text-[#e0e0e0]">
+                                {format(date, 'MM/dd')} {weekday}
+                              </td>
+                              <td className="px-2 py-1">
+                                <span className={`px-1 py-0.5 rounded text-[10px] font-medium ${
+                                  record.type === '定投'
+                                    ? 'bg-[#4a9eff]/20 text-[#4a9eff] border border-[#4a9eff]/30'
+                                    : 'bg-[#52c41a]/20 text-[#52c41a] border border-[#52c41a]/30'
+                                }`}>
+                                  {record.type}
+                                </span>
+                              </td>
+                              <td className="px-2 py-1 text-[10px] text-[#e0e0e0]">
+                                {record.netValue ? record.netValue.toFixed(4) : '0.0000'}
+                              </td>
+                              <td className="px-2 py-1 text-[10px] text-[#e0e0e0]">
+                                {record.investmentAmount ? Number(record.investmentAmount.toFixed(2)).toLocaleString('zh-CN') : '0.00'}
+                              </td>
+                              <td className="px-2 py-1 text-[10px] text-[#e0e0e0]">
+                                {record.shares ? Number(record.shares.toFixed(2)) : '0.00'}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  {investmentRecords.length > 5 && (
+                    <div className="px-3 py-2 border-t border-[#2a2a2a] text-center">
+                      <span className="text-xs text-[#888]">
+                        显示最近5条，共{investmentRecords.length}条记录
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#0f0f0f] via-[#0a0a0a] to-[#0f0f0f]">
+              <div className="text-center text-[#666] px-6">
+                <div className="relative inline-block mb-6">
+                  <div className="text-5xl mb-2 opacity-60 animate-pulse">📊</div>
+                  <div className="absolute inset-0 bg-gradient-to-r from-[#4a9eff]/20 via-transparent to-[#4a9eff]/20 blur-xl"></div>
+                </div>
+                <h3 className="text-lg text-[#b0b0b0] font-semibold mb-3">准备开始回测</h3>
+                <p className="text-sm text-[#888] mb-4 leading-relaxed">请设置参数并开始回测</p>
+              </div>
+            </div>
+          )}
+
+          {/* 移动端加载状态 */}
+          {loading && (
+            <div className="absolute inset-0 bg-[rgba(15,15,15,0.95)] backdrop-blur-sm flex items-center justify-center z-[1000] animate-in fade-in duration-300">
+              <div className="text-center text-[#b0b0b0]">
+                <div className="relative mb-6">
+                  <div className="w-12 h-12 border-4 border-[#2a2a2a] border-t-[#4a9eff] rounded-full animate-spin mx-auto"></div>
+                  <div className="absolute inset-0 w-12 h-12 border-4 border-transparent border-r-[#0066cc] rounded-full animate-spin mx-auto" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }}></div>
+                </div>
+                <p className="text-sm text-[#b0b0b0] font-medium mb-2">正在获取数据并计算回测结果</p>
               </div>
             </div>
           )}
