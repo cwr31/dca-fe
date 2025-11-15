@@ -378,11 +378,11 @@ export default function Home() {
 
 
   return (
-    <div className="w-full min-h-screen bg-gradient-to-br from-[#0a0a0a] via-[#0f0f0f] to-[#0a0a0a]">
+    <div className="w-full min-h-screen bg-gradient-to-br from-[#0a0a0a] via-[#0f0f0f] to-[#0a0a0a] overflow-hidden">
       <div className="flex min-h-screen w-full relative">
         {/* 左侧参数设置面板 */}
         <div
-          className="w-[340px] min-w-[340px] h-full bg-gradient-to-b from-[#1a1a1a] to-[#151515] border-r border-[#2a2a2a] flex flex-col overflow-y-auto overflow-x-hidden custom-scrollbar shadow-2xl"
+          className="w-[340px] min-w-[340px] h-full bg-gradient-to-b from-[#1a1a1a] to-[#151515] border-r border-[#2a2a2a] flex flex-col overflow-y-auto overflow-x-hidden custom-scrollbar shadow-2xl flex-shrink-0"
         >
           <div className="px-4 py-4 flex-1 space-y-4">
 
@@ -601,7 +601,7 @@ export default function Home() {
         </div>
 
         {/* 右侧图表展示区域 */}
-        <div className="flex-1 bg-gradient-to-br from-[#0f0f0f] via-[#0a0a0a] to-[#0f0f0f] flex flex-col relative">
+        <div className="flex-1 bg-gradient-to-br from-[#0f0f0f] via-[#0a0a0a] to-[#0f0f0f] flex flex-col relative min-w-0 overflow-hidden">
           {chartData.length > 0 ? (
             <div className="w-full flex flex-col p-5 gap-6 animate-in fade-in duration-500">
               {/* 回测统计 - 根据模式显示不同的统计卡片 */}
