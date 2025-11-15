@@ -67,13 +67,16 @@ export default function InvestmentChart({
       funds.forEach((fund, index) => {
         if (mode === 'multi-dca') {
           visibility[`fund${index + 1}_value`] = true;
-          visibility[`fund${index + 1}_investment`] = true;
           visibility[`fund${index + 1}_return`] = true;
         } else if (mode === 'multi-lumpsum') {
           visibility[`fund${index + 1}_lumpSum`] = true;
           visibility[`fund${index + 1}_lumpSumReturn`] = true;
         }
       });
+      // 为多基金定投模式添加共用的累计投入线可见性
+      if (mode === 'multi-dca') {
+        visibility.shared_investment = true;
+      }
       return visibility;
     }
   });
@@ -95,6 +98,8 @@ export default function InvestmentChart({
     lumpSum: { name: '一次性投入', color: '#FF6BFF' },
     return: { name: '定投年化收益率', color: '#4ECDC4' },
     lumpSumReturn: { name: '一次性投入年化收益率', color: '#FF6BFF' },
+    // 多基金共用配置
+    shared_investment: { name: '累计投入', color: '#00CED1' },
   };
 
   // 获取多基金颜色配置
@@ -326,15 +331,10 @@ export default function InvestmentChart({
         const fundPrefix = `fund${fundIndex + 1}`;
 
         if (mode === 'multi-dca') {
-          // 多基金定投模式
+          // 多基金定投模式 - 当前价值各自独立
           seriesData[`${fundPrefix}_currentValue`] = data.map(item => ({
             time: item.date as any,
             value: (item as any)[`${fundPrefix}_currentValue`] || 0,
-          }));
-
-          seriesData[`${fundPrefix}_totalInvestment`] = data.map(item => ({
-            time: item.date as any,
-            value: (item as any)[`${fundPrefix}_totalInvestment`] || 0,
           }));
 
           seriesData[`${fundPrefix}_return`] = data.map(item => ({
@@ -354,9 +354,18 @@ export default function InvestmentChart({
           }));
         }
       });
-    }
 
-    return { seriesData };
+      // 为多基金定投模式添加共用的累计投入线
+      if (mode === 'multi-dca') {
+        // 使用第一个基金的总投入数据作为共用线
+        const sharedInvestmentData = data.map(item => ({
+          time: item.date as any,
+          value: (item as any)[`fund1_totalInvestment`] || 0,
+        }));
+        seriesData['shared_investment'] = sharedInvestmentData;
+      }
+
+      return { seriesData };
   }, [data, mode, funds]);
 
   // 创建浮动工具提示
@@ -724,7 +733,7 @@ export default function InvestmentChart({
         if (mode === 'multi-dca') {
           // 多基金定投模式
           if (chartView === 'cost') {
-            // 成本视图：显示当前价值和累计投入
+            // 成本视图：显示当前价值和共用的累计投入线
             const valueConfig = getMultiFundSeriesConfig(fundIndex, 'value');
             if (seriesVisibility[`${fundPrefix}_value`]) {
               const valueSeries = chart.addSeries(LineSeries, {
@@ -739,23 +748,6 @@ export default function InvestmentChart({
               } as LineSeriesOptions);
               valueSeries.setData(seriesData[`${fundPrefix}_currentValue`] || []);
               seriesRef.current.push(valueSeries);
-            }
-
-            const investmentConfig = getMultiFundSeriesConfig(fundIndex, 'investment');
-            if (seriesVisibility[`${fundPrefix}_investment`]) {
-              const investmentSeries = chart.addSeries(LineSeries, {
-                color: investmentConfig.color,
-                lineWidth: 2,
-                lineStyle: LineStyle.Dashed,
-                crosshairMarkerVisible: true,
-                crosshairMarkerRadius: 4,
-                crosshairMarkerBackgroundColor: investmentConfig.color,
-                crosshairMarkerBorderColor: '#ffffff',
-                crosshairMarkerBorderWidth: 2,
-                priceLineVisible: false,
-              } as LineSeriesOptions);
-              investmentSeries.setData(seriesData[`${fundPrefix}_totalInvestment`] || []);
-              seriesRef.current.push(investmentSeries);
             }
           } else {
             // 收益率视图
@@ -824,6 +816,24 @@ export default function InvestmentChart({
           }
         }
       });
+
+      // 为多基金定投模式添加共用的累计投入线
+      if (mode === 'multi-dca' && chartView === 'cost' && seriesVisibility.shared_investment) {
+        const sharedInvestmentConfig = seriesConfig.shared_investment;
+        const sharedInvestmentSeries = chart.addSeries(LineSeries, {
+          color: sharedInvestmentConfig.color,
+          lineWidth: 2,
+          lineStyle: LineStyle.Dashed,
+          crosshairMarkerVisible: true,
+          crosshairMarkerRadius: 4,
+          crosshairMarkerBackgroundColor: sharedInvestmentConfig.color,
+          crosshairMarkerBorderColor: '#ffffff',
+          crosshairMarkerBorderWidth: 2,
+          priceLineVisible: false,
+        } as LineSeriesOptions);
+        sharedInvestmentSeries.setData(seriesData.shared_investment || []);
+        seriesRef.current.push(sharedInvestmentSeries);
+      }
     }
 
     // 设置工具提示（只在有系列数据时设置）
@@ -1249,6 +1259,24 @@ export default function InvestmentChart({
                 }
                 return null;
               })
+            )}
+
+            {/* 为多基金定投模式添加共用的累计投入线图例 */}
+            {mode === 'multi-dca' && chartView === 'cost' && (
+              <div className="border-t border-gray-600 pt-2 mt-2">
+                <button
+                  onClick={() => toggleSeriesVisibility('shared_investment' as any)}
+                  className={`flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
+                    seriesVisibility.shared_investment ? 'opacity-100' : 'opacity-50'
+                  }`}
+                >
+                  <div
+                    className="w-3 h-0.5 rounded"
+                    style={{ backgroundColor: seriesConfig.shared_investment.color, borderStyle: 'dashed' }}
+                  />
+                  <span className="text-gray-200">{seriesConfig.shared_investment.name}</span>
+                </button>
+              </div>
             )}
           </div>
         </div>
