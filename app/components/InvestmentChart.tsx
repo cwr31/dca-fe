@@ -93,13 +93,13 @@ export default function InvestmentChart({
   // 系列配置
   const seriesConfig = {
     // 单基金模式配置
-    cost: { name: '累计投入', color: '#00CED1' },
+    cost: { name: '累计投入', color: '#FFFFFF' },
     value: { name: '当前价值', color: '#FFD700' },
     lumpSum: { name: '一次性投入', color: '#FF6BFF' },
     return: { name: '定投年化收益率', color: '#4ECDC4' },
     lumpSumReturn: { name: '一次性投入年化收益率', color: '#FF6BFF' },
     // 多基金共用配置
-    shared_investment: { name: '累计投入', color: '#00CED1' },
+    shared_investment: { name: '累计投入', color: '#FFFFFF' },
   };
 
   // 获取多基金颜色配置
