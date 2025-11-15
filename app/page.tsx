@@ -378,11 +378,11 @@ export default function Home() {
 
 
   return (
-    <div className="w-full min-h-screen bg-gradient-to-br from-[#0a0a0a] via-[#0f0f0f] to-[#0a0a0a] overflow-hidden">
+    <div className="w-full min-h-screen bg-gradient-to-br from-[#0a0a0a] via-[#0f0f0f] to-[#0a0a0a]">
       <div className="flex min-h-screen w-full relative">
         {/* 左侧参数设置面板 */}
         <div
-          className="w-[340px] min-w-[340px] h-full bg-gradient-to-b from-[#1a1a1a] to-[#151515] border-r border-[#2a2a2a] flex flex-col overflow-y-auto overflow-x-hidden custom-scrollbar shadow-2xl flex-shrink-0"
+          className="w-[340px] min-w-[340px] h-screen bg-gradient-to-b from-[#1a1a1a] to-[#151515] border-r border-[#2a2a2a] flex flex-col overflow-y-auto overflow-x-hidden custom-scrollbar shadow-2xl flex-shrink-0 fixed"
         >
           <div className="px-4 py-4 flex-1 space-y-4">
 
@@ -601,9 +601,9 @@ export default function Home() {
         </div>
 
         {/* 右侧图表展示区域 */}
-        <div className="flex-1 bg-gradient-to-br from-[#0f0f0f] via-[#0a0a0a] to-[#0f0f0f] flex flex-col relative min-w-0">
+        <div className="ml-[340px] flex-1 bg-gradient-to-br from-[#0f0f0f] via-[#0a0a0a] to-[#0f0f0f] min-h-screen">
           {chartData.length > 0 ? (
-            <div className="w-full flex flex-col p-5 gap-6 animate-in fade-in duration-500">
+            <div className="w-full flex flex-col p-5 gap-6 min-h-screen animate-in fade-in duration-500">
               {/* 回测统计 - 根据模式显示不同的统计卡片 */}
               {stats ? (
                 mode === 'single' ? (
@@ -640,13 +640,12 @@ export default function Home() {
                 // 如果chartData有数据但stats还在加载，显示骨架屏
                 <StatsSkeleton count={4} />
               ) : null}
-              <div className="flex flex-col gap-5">
+              <div className="flex flex-col gap-5 flex-1">
                 {/* 图表区域 - 无遮挡，全区域显示 */}
                 <div
-                  className="bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl p-0 border border-[#2a2a2a] shadow-2xl"
+                  className="bg-gradient-to-br from-[#151515] to-[#1a1a1a] rounded-xl p-0 border border-[#2a2a2a] shadow-2xl flex-1 flex flex-col"
                   style={{
-                    height: 'calc(100vh - 400px)',
-                    maxHeight: '600px',
+                    minHeight: '400px',
                     overflow: 'hidden',
                     position: 'relative'
                   }}
