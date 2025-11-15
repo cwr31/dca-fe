@@ -3,9 +3,9 @@ import React from 'react';
 interface StatsCardProps {
   icon: string;
   title: string;
-  value: string | number;
+  value: string | number | React.ReactNode;
   subtitle: string;
-  subValue: string | number;
+  subValue: string | number | React.ReactNode;
   trend?: 'positive' | 'negative' | 'neutral';
   accentColor?: string;
   className?: string;

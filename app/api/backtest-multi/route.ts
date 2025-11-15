@@ -280,12 +280,15 @@ function calculateStats(results: BacktestResult[], mode: string) {
 
   const lastResult = results[results.length - 1];
 
+  const totalInvestment = lastResult.totalInvestment || 0;
+  const currentValue = lastResult.currentValue || 0;
+
   if (mode === 'single') {
     return {
-      totalInvestment: lastResult.totalInvestment || 0,
-      currentValue: lastResult.currentValue || 0,
-      profitRate: lastResult.totalInvestment > 0
-        ? ((lastResult.currentValue! - lastResult.totalInvestment!) / lastResult.totalInvestment!) * 100
+      totalInvestment,
+      currentValue,
+      profitRate: totalInvestment > 0
+        ? ((currentValue - totalInvestment) / totalInvestment) * 100
         : 0,
       annualizedReturnRate: lastResult.annualizedReturnRate || 0
     };

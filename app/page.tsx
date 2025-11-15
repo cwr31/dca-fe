@@ -308,16 +308,16 @@ export default function Home() {
             // 多基金定投模式
             validFunds.forEach((fund, index) => {
               const fundPrefix = `fund${index + 1}`;
-              baseData[`${fundPrefix}_currentValue`] = Number((item[`${fundPrefix}_currentValue`] || 0).toFixed(2));
-              baseData[`${fundPrefix}_totalInvestment`] = Number((item[`${fundPrefix}_totalInvestment`] || 0).toFixed(2));
-              baseData[`${fundPrefix}_return`] = Number((item[`${fundPrefix}_return`] || 0).toFixed(2));
+              baseData[`${fundPrefix}_currentValue`] = Number(((item as any)[`${fundPrefix}_currentValue`] || 0).toFixed(2));
+              baseData[`${fundPrefix}_totalInvestment`] = Number(((item as any)[`${fundPrefix}_totalInvestment`] || 0).toFixed(2));
+              baseData[`${fundPrefix}_return`] = Number(((item as any)[`${fundPrefix}_return`] || 0).toFixed(2));
             });
           } else if (mode === 'multi-lumpsum') {
             // 多基金一次性投入模式
             validFunds.forEach((fund, index) => {
               const fundPrefix = `fund${index + 1}`;
-              baseData[`${fundPrefix}_lumpSum`] = Number((item[`${fundPrefix}_lumpSum`] || 0).toFixed(2));
-              baseData[`${fundPrefix}_lumpSumReturn`] = Number((item[`${fundPrefix}_lumpSumReturn`] || 0).toFixed(2));
+              baseData[`${fundPrefix}_lumpSum`] = Number(((item as any)[`${fundPrefix}_lumpSum`] || 0).toFixed(2));
+              baseData[`${fundPrefix}_lumpSumReturn`] = Number(((item as any)[`${fundPrefix}_lumpSumReturn`] || 0).toFixed(2));
             });
           }
 
@@ -801,7 +801,7 @@ export default function Home() {
                     </h3>
                     {investmentRecords.length > 0 && (
                       <button
-                        onClick={() => handleExportCSV(investmentRecords, fundCode)}
+                        onClick={() => handleExportCSV(investmentRecords, mode === 'single' ? '基金定投' : '多基金定投')}
                         className="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-[#252525] border border-[#3a3a3a] text-[#b0b0b0] hover:bg-[#4a9eff] hover:text-white hover:border-[#4a9eff] transition-all duration-200 active:scale-95 flex items-center gap-1"
                         title="导出为CSV"
                         aria-label="导出定投记录为CSV格式"

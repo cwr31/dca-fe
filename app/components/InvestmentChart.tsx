@@ -127,9 +127,9 @@ export default function InvestmentChart({
   // 切换系列可见性
   const toggleSeriesVisibility = (seriesKey: keyof typeof internalSeriesVisibility) => {
     if (onToggleSeries) {
-      onToggleSeries(seriesKey);
+      onToggleSeries(String(seriesKey));
     } else {
-      setInternalSeriesVisibility(prev => ({
+      setInternalSeriesVisibility((prev: typeof internalSeriesVisibility) => ({
         ...prev,
         [seriesKey]: !prev[seriesKey]
       }));
@@ -329,28 +329,28 @@ export default function InvestmentChart({
           // 多基金定投模式
           seriesData[`${fundPrefix}_currentValue`] = data.map(item => ({
             time: item.date as any,
-            value: item[`${fundPrefix}_currentValue`] || 0,
+            value: (item as any)[`${fundPrefix}_currentValue`] || 0,
           }));
 
           seriesData[`${fundPrefix}_totalInvestment`] = data.map(item => ({
             time: item.date as any,
-            value: item[`${fundPrefix}_totalInvestment`] || 0,
+            value: (item as any)[`${fundPrefix}_totalInvestment`] || 0,
           }));
 
           seriesData[`${fundPrefix}_return`] = data.map(item => ({
             time: item.date as any,
-            value: item[`${fundPrefix}_return`] || 0,
+            value: (item as any)[`${fundPrefix}_return`] || 0,
           }));
         } else if (mode === 'multi-lumpsum') {
           // 多基金一次性投入模式
           seriesData[`${fundPrefix}_lumpSum`] = data.map(item => ({
             time: item.date as any,
-            value: item[`${fundPrefix}_lumpSum`] || 0,
+            value: (item as any)[`${fundPrefix}_lumpSum`] || 0,
           }));
 
           seriesData[`${fundPrefix}_lumpSumReturn`] = data.map(item => ({
             time: item.date as any,
-            value: item[`${fundPrefix}_lumpSumReturn`] || 0,
+            value: (item as any)[`${fundPrefix}_lumpSumReturn`] || 0,
           }));
         }
       });
@@ -550,8 +550,8 @@ export default function InvestmentChart({
 
           if (mode === 'multi-dca') {
             if (chartView === 'cost') {
-              const currentValue = item[`${fundPrefix}_currentValue`] || 0;
-              const totalInvestment = item[`${fundPrefix}_totalInvestment`] || 0;
+              const currentValue = (item as any)[`${fundPrefix}_currentValue`] || 0;
+              const totalInvestment = (item as any)[`${fundPrefix}_totalInvestment`] || 0;
               const returnRate = totalInvestment > 0 ? ((currentValue - totalInvestment) / totalInvestment) * 100 : 0;
 
               tooltipContent += `
@@ -560,7 +560,7 @@ export default function InvestmentChart({
                 </div>
               `;
             } else {
-              const returnRate = item[`${fundPrefix}_return`] || 0;
+              const returnRate = (item as any)[`${fundPrefix}_return`] || 0;
               tooltipContent += `
                 <div style="margin-bottom: 4px; color: ${fundColor}; font-weight: 600;">
                   ${fundCode} 年化收益率: ${returnRate.toFixed(2)}%
@@ -569,14 +569,14 @@ export default function InvestmentChart({
             }
           } else if (mode === 'multi-lumpsum') {
             if (chartView === 'cost') {
-              const lumpSumValue = item[`${fundPrefix}_lumpSum`] || 0;
+              const lumpSumValue = (item as any)[`${fundPrefix}_lumpSum`] || 0;
               tooltipContent += `
                 <div style="margin-bottom: 4px; color: ${fundColor}; font-weight: 600;">
                   ${fundCode} 一次性投入: ¥${lumpSumValue.toFixed(2)}
                 </div>
               `;
             } else {
-              const lumpSumReturn = item[`${fundPrefix}_lumpSumReturn`] || 0;
+              const lumpSumReturn = (item as any)[`${fundPrefix}_lumpSumReturn`] || 0;
               tooltipContent += `
                 <div style="margin-bottom: 4px; color: ${fundColor}; font-weight: 600;">
                   ${fundCode} 一次性收益率: ${lumpSumReturn.toFixed(2)}%
