@@ -87,17 +87,8 @@ const InvestmentChart = forwardRef<HTMLDivElement, InvestmentChartProps>(({
 
   const seriesVisibility = externalSeriesVisibility ?? internalSeriesVisibility;
 
-  // 合并refs
-  const mergedRef = (node: HTMLDivElement) => {
-    chartContainerRef.current = node;
-    if (ref) {
-      if (typeof ref === 'function') {
-        ref(node);
-      } else {
-        ref.current = node;
-      }
-    }
-  };
+  // 简化ref处理 - 只使用内部ref
+  const containerRef = chartContainerRef;
 
   // 响应式图表尺寸计算
   const calculateChartDimensions = useCallback(() => {
@@ -192,7 +183,7 @@ const InvestmentChart = forwardRef<HTMLDivElement, InvestmentChartProps>(({
   // 暴露给外部组件调用的方法
   useImperativeHandle(ref, () => ({
     toggleSeriesVisibility
-  }));
+  } as any));
 
   const applySelectionRange = useCallback((startCoord: number, endCoord: number) => {
     if (!chartRef.current || !data || data.length === 0) return;
@@ -1088,7 +1079,7 @@ const InvestmentChart = forwardRef<HTMLDivElement, InvestmentChartProps>(({
       data-chart-container
     >
       <div
-        ref={mergedRef}
+        ref={chartContainerRef}
         className="w-full h-full"
         style={{
           padding: '25px', // 四周添加padding

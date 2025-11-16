@@ -149,7 +149,7 @@ export default function Home() {
   const recordsPerPage = 10;
   // 处理图例切换
   const handleToggleSeries = (seriesKey: string) => {
-    setSeriesVisibility(prev => ({
+    setSeriesVisibility((prev: any) => ({
       ...prev,
       [seriesKey]: !prev[seriesKey]
     }));

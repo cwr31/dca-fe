@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 
-interface FundInput {
+export interface FundInput {
   id: string;
   code: string;
   name?: string;
