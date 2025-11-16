@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { format, subYears } from 'date-fns';
 import dynamic from 'next/dynamic';
 
@@ -22,6 +22,11 @@ const MultiFundStatsCards = dynamic(() => import('./components/MultiFundStatsCar
 
 const StatsSkeleton = dynamic(() => import('./components/Skeleton').then((mod) => ({ default: mod.StatsSkeleton })), {
   ssr: false
+});
+
+const ChartLegend = dynamic(() => import('./components/ChartLegend'), {
+  ssr: false,
+  loading: () => <div className="flex items-center gap-2"><div className="w-3 h-0.5 rounded bg-[#4a9eff] animate-pulse"></div></div>
 });
 
 const FundSelector = dynamic(() => import('./components/FundSelector'), {
@@ -98,6 +103,7 @@ export default function Home() {
   const [chartData, setChartData] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [investmentRecords, setInvestmentRecords] = useState<any[]>([]);
+  const chartRef = useRef<any>(null);
 
   // 模式切换时清空右侧数据，保留左侧参数
   const handleModeChange = (newMode: 'single' | 'multi-dca' | 'multi-lumpsum') => {
@@ -107,6 +113,33 @@ export default function Home() {
     setStats(null);
     setInvestmentRecords([]);
     setError('');
+
+    // 重置图例可见性状态
+    if (newMode === 'single') {
+      setSeriesVisibility({
+        cost: true,
+        value: true,
+        lumpSum: true,
+        return: true,
+        lumpSumReturn: true,
+      });
+    } else {
+      const visibility: any = {};
+      funds.filter(f => f.code.trim()).forEach((fund, index) => {
+        const fundPrefix = `fund${index + 1}`;
+        if (newMode === 'multi-dca') {
+          visibility[`${fundPrefix}_value`] = true;
+          visibility[`${fundPrefix}_return`] = true;
+        } else if (newMode === 'multi-lumpsum') {
+          visibility[`${fundPrefix}_lumpSum`] = true;
+          visibility[`${fundPrefix}_lumpSumReturn`] = true;
+        }
+      });
+      if (newMode === 'multi-dca') {
+        visibility.shared_investment = true;
+      }
+      setSeriesVisibility(visibility);
+    }
   };
 
   const [chartView, setChartView] = useState<'cost' | 'return'>('cost'); // 图表视图：cost=成本收益视图, return=年化收益率视图
@@ -114,6 +147,42 @@ export default function Home() {
   const [brushEndIndex, setBrushEndIndex] = useState<number>(0);
   const [recordsPage, setRecordsPage] = useState(1);
   const recordsPerPage = 10;
+  // 处理图例切换
+  const handleToggleSeries = (seriesKey: string) => {
+    setSeriesVisibility(prev => ({
+      ...prev,
+      [seriesKey]: !prev[seriesKey]
+    }));
+  };
+
+  // 图例可见性状态
+  const [seriesVisibility, setSeriesVisibility] = useState(() => {
+    if (mode === 'single') {
+      return {
+        cost: true,
+        value: true,
+        lumpSum: true,
+        return: true,
+        lumpSumReturn: true,
+      };
+    } else {
+      const visibility: any = {};
+      funds.filter(f => f.code.trim()).forEach((fund, index) => {
+        const fundPrefix = `fund${index + 1}`;
+        if (mode === 'multi-dca') {
+          visibility[`${fundPrefix}_value`] = true;
+          visibility[`${fundPrefix}_return`] = true;
+        } else if (mode === 'multi-lumpsum') {
+          visibility[`${fundPrefix}_lumpSum`] = true;
+          visibility[`${fundPrefix}_lumpSumReturn`] = true;
+        }
+      });
+      if (mode === 'multi-dca') {
+        visibility.shared_investment = true;
+      }
+      return visibility;
+    }
+  });
 
   useEffect(() => {
     setRecordsPage(1);
@@ -652,7 +721,7 @@ export default function Home() {
                 >
                   <div className="flex flex-col gap-3 px-4 py-3 border-b border-[#2a2a2a] bg-gradient-to-r from-[#1a1a1a] to-[#1f1f1f] flex-shrink-0">
                     <div className="flex flex-col gap-3">
-                      <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
                         <h3 className="text-white text-base font-semibold truncate flex-1">
                           {mode === 'single'
                             ? (chartView === 'cost' ? '收益表' : '收益率表')
@@ -663,7 +732,7 @@ export default function Home() {
                           }
                         </h3>
                         {chartData.length > 0 && brushEndIndex >= brushStartIndex && (
-                          <span className="text-xs text-[#888] font-medium">
+                          <span className="text-xs text-[#888] font-medium w-full sm:w-auto order-2 sm:order-1">
                             {format(new Date(chartData[Math.max(0, Math.min(chartData.length - 1, brushStartIndex))].date), 'yyyy-MM-dd')}
                             {' ~ '}
                             {format(new Date(chartData[Math.max(0, Math.min(chartData.length - 1, brushEndIndex))].date), 'yyyy-MM-dd')}
@@ -671,8 +740,8 @@ export default function Home() {
                         )}
                       </div>
 
-                      <div className="flex items-center gap-3 flex-shrink-0">
-                        <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div className="flex items-center gap-2 order-1 sm:order-1">
                           <button
                             onClick={() => setChartView(chartView === 'cost' ? 'return' : 'cost')}
                             className="inline-flex items-center rounded-lg border border-[#2a2a2a] bg-[#1f1f1f] px-3 py-1.5 text-xs font-medium text-[#d0d0d0] shadow-sm hover:bg-[#2a2a2a] hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4a9eff]/70"
@@ -706,10 +775,20 @@ export default function Home() {
                             </button>
                           )}
                         </div>
+
+                        {/* 图例控制区域 */}
+                        <ChartLegend
+                          mode={mode}
+                          chartView={chartView}
+                          seriesVisibility={seriesVisibility}
+                          funds={funds.filter(f => f.code.trim())}
+                          onToggleSeries={handleToggleSeries}
+                        />
                       </div>
                     </div>
                   </div>
                   <InvestmentChart
+                    ref={chartRef}
                     data={chartData}
                     chartView={chartView}
                     mode={mode}
@@ -720,6 +799,8 @@ export default function Home() {
                     }}
                     brushStartIndex={brushStartIndex}
                     brushEndIndex={brushEndIndex > 0 ? brushEndIndex : (chartData.length > 0 ? chartData.length - 1 : 0)}
+                    externalSeriesVisibility={seriesVisibility}
+                    onToggleSeries={handleToggleSeries}
                   />
                 </div>
 
@@ -1197,6 +1278,8 @@ export default function Home() {
                   }}
                   brushStartIndex={brushStartIndex}
                   brushEndIndex={brushEndIndex > 0 ? brushEndIndex : (chartData.length > 0 ? chartData.length - 1 : 0)}
+                  externalSeriesVisibility={seriesVisibility}
+                  onToggleSeries={handleToggleSeries}
                 />
               </div>
 

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import {
   createChart,
   IChartApi,
@@ -33,7 +33,7 @@ interface InvestmentChartProps {
   externalSeriesVisibility?: any;
 }
 
-export default function InvestmentChart({
+const InvestmentChart = forwardRef<HTMLDivElement, InvestmentChartProps>(({
   data,
   chartView,
   mode = 'single',
@@ -43,7 +43,7 @@ export default function InvestmentChart({
   brushEndIndex = 0,
   onToggleSeries,
   externalSeriesVisibility,
-}: InvestmentChartProps) {
+}, ref) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<any[]>([]);
@@ -86,6 +86,18 @@ export default function InvestmentChart({
   });
 
   const seriesVisibility = externalSeriesVisibility ?? internalSeriesVisibility;
+
+  // 合并refs
+  const mergedRef = (node: HTMLDivElement) => {
+    chartContainerRef.current = node;
+    if (ref) {
+      if (typeof ref === 'function') {
+        ref(node);
+      } else {
+        ref.current = node;
+      }
+    }
+  };
 
   // 响应式图表尺寸计算
   const calculateChartDimensions = useCallback(() => {
@@ -176,6 +188,11 @@ export default function InvestmentChart({
       }));
     }
   };
+
+  // 暴露给外部组件调用的方法
+  useImperativeHandle(ref, () => ({
+    toggleSeriesVisibility
+  }));
 
   const applySelectionRange = useCallback((startCoord: number, endCoord: number) => {
     if (!chartRef.current || !data || data.length === 0) return;
@@ -1068,9 +1085,10 @@ export default function InvestmentChart({
         minHeight: '420px',
         height: '100%'
       }}
+      data-chart-container
     >
       <div
-        ref={chartContainerRef}
+        ref={mergedRef}
         className="w-full h-full"
         style={{
           padding: '25px', // 四周添加padding
@@ -1094,203 +1112,6 @@ export default function InvestmentChart({
         />
       )}
 
-      // 图例
-      {isChartReady && (
-        <div className="absolute bottom-2 left-2 bg-[rgba(26,26,26,0.9)] rounded p-2 z-10 backdrop-blur-sm border border-[#2a2a2a]"
-          style={{
-            fontSize: '11px',
-            fontFamily: 'system-ui, -apple-system, sans-serif'
-          }}
-        >
-          <div className="space-2">
-            {mode === 'single' ? (
-              chartView === 'cost' ? (
-                <>
-                  <button
-                    onClick={() => toggleSeriesVisibility('cost')}
-                    className="flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
-                      seriesVisibility.cost ? 'opacity-100' : 'opacity-50'
-                    }"
-                  >
-                    <div
-                      className="w-3 h-0.5 rounded"
-                      style={{ backgroundColor: seriesConfig.cost.color }}
-                    />
-                    <span className="text-gray-200 text-xs">{seriesConfig.cost.name}</span>
-                  </button>
-
-                  <button
-                    onClick={() => toggleSeriesVisibility('value')}
-                    className="flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
-                      seriesVisibility.value ? 'opacity-100' : 'opacity-50'
-                    }"
-                  >
-                    <div
-                      className="w-3 h-0.5 rounded"
-                      style={{ backgroundColor: seriesConfig.value.color }}
-                    />
-                    <span className="text-gray-200 text-xs">{seriesConfig.value.name}</span>
-                  </button>
-
-                  <button
-                    onClick={() => toggleSeriesVisibility('lumpSum')}
-                    className="flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
-                      seriesVisibility.lumpSum ? 'opacity-100' : 'opacity-50'
-                    }"
-                  >
-                    <div
-                      className="w-3 h-0.5 rounded"
-                      style={{ backgroundColor: seriesConfig.lumpSum.color }}
-                    />
-                    <span className="text-gray-200 text-xs">{seriesConfig.lumpSum.name}</span>
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    onClick={() => toggleSeriesVisibility('return')}
-                    className="flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
-                      seriesVisibility.return ? 'opacity-100' : 'opacity-50'
-                    }"
-                  >
-                    <div
-                      className="w-3 h-0.5 rounded"
-                      style={{ backgroundColor: seriesConfig.return.color }}
-                    />
-                    <span className="text-gray-200 text-xs">{seriesConfig.return.name}</span>
-                  </button>
-
-                  <button
-                    onClick={() => toggleSeriesVisibility('lumpSumReturn')}
-                    className="flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
-                      seriesVisibility.lumpSumReturn ? 'opacity-100' : 'opacity-50'
-                    }"
-                  >
-                    <div
-                      className="w-3 h-0.5 rounded"
-                      style={{ backgroundColor: seriesConfig.lumpSumReturn.color }}
-                    />
-                    <span className="text-gray-200 text-xs">{seriesConfig.lumpSumReturn.name}</span>
-                  </button>
-                </>
-              )
-            ) : (
-              // 多基金模式的图例
-              funds.map((fund, fundIndex) => {
-                const fundPrefix = `fund${fundIndex + 1}`;
-                const fundCode = fund.code || `基金${fundIndex + 1}`;
-                const fundColor = getFundColor(fundIndex);
-
-                if (mode === 'multi-dca') {
-                  return chartView === 'cost' ? (
-                    <div key={fundIndex} className="space-1">
-                      <button
-                        onClick={() => toggleSeriesVisibility(`${fundPrefix}_value` as any)}
-                        className="flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
-                          seriesVisibility[`${fundPrefix}_value`] ? 'opacity-100' : 'opacity-50'
-                        }"
-                      >
-                        <div
-                          className="w-3 h-0.5 rounded"
-                          style={{ backgroundColor: fundColor }}
-                        />
-                        <span className="text-gray-200 text-xs">{`${fundCode} 当前价值`}</span>
-                      </button>
-
-                      <button
-                        onClick={() => toggleSeriesVisibility(`${fundPrefix}_investment` as any)}
-                        className="flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
-                          seriesVisibility[`${fundPrefix}_investment`] ? 'opacity-100' : 'opacity-50'
-                        }"
-                      >
-                        <div
-                          className="w-3 h-0.5 rounded"
-                          style={{ backgroundColor: fundColor, borderStyle: 'dashed' }}
-                        />
-                        <span className="text-gray-200 text-xs">{`${fundCode} 累计投入`}</span>
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      key={fundIndex}
-                      onClick={() => toggleSeriesVisibility(`${fundPrefix}_return` as any)}
-                      className="flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
-                        seriesVisibility[`${fundPrefix}_return`] ? 'opacity-100' : 'opacity-50'
-                      }"
-                    >
-                      <div
-                        className="w-3 h-0.5 rounded"
-                        style={{ backgroundColor: fundColor }}
-                      />
-                      <span className="text-gray-200 text-xs">{`${fundCode} 收益率`}</span>
-                    </button>
-                  );
-                } else if (mode === 'multi-lumpsum') {
-                  return chartView === 'cost' ? (
-                    <button
-                      key={fundIndex}
-                      onClick={() => toggleSeriesVisibility(`${fundPrefix}_lumpSum` as any)}
-                      className="flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
-                        seriesVisibility[`${fundPrefix}_lumpSum`] ? 'opacity-100' : 'opacity-50'
-                      }"
-                    >
-                      <div
-                        className="w-3 h-0.5 rounded"
-                        style={{ backgroundColor: fundColor }}
-                      />
-                      <span className="text-gray-200 text-xs">{`${fundCode} 一次性`}</span>
-                    </button>
-                  ) : (
-                    <button
-                      key={fundIndex}
-                      onClick={() => toggleSeriesVisibility(`${fundPrefix}_lumpSumReturn` as any)}
-                      className="flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
-                        seriesVisibility[`${fundPrefix}_lumpSumReturn`] ? 'opacity-100' : 'opacity-50'
-                      }"
-                    >
-                      <div
-                        className="w-3 h-0.5 rounded"
-                        style={{ backgroundColor: fundColor }}
-                      />
-                      <span className="text-gray-200 text-xs">{`${fundCode} 收益率`}</span>
-                    </button>
-                  );
-                }
-                return null;
-              })
-            )}
-
-            {/* 为多基金定投模式添加共用的累计投入线图例 */}
-            {mode === 'multi-dca' && chartView === 'cost' && (
-              <div className="border-t border-gray-600 pt-2 mt-2">
-                <button
-                  onClick={() => toggleSeriesVisibility('shared_investment' as any)}
-                  className="flex items-center gap-2 px-2 py-1 rounded transition-all duration-200 hover:bg-gray-700 ${
-                    seriesVisibility.shared_investment ? 'opacity-100' : 'opacity-50'
-                  }"
-                >
-                  <div
-                    className="w-3 h-0.5 rounded"
-                    style={{ backgroundColor: seriesConfig.shared_investment.color, borderStyle: 'dashed' }}
-                  />
-                  <span className="text-gray-200 text-xs">{seriesConfig.shared_investment.name}</span>
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* 当没有曲线被选中时的空状态 */}
-      {isChartReady && seriesRef.current.length === 0 && (
-        <div className="absolute inset-0 flex items-center justify-center bg-[#151515] rounded-xl">
-          <div className="text-center text-[#666]">
-            <div className="text-lg mb-2">📈</div>
-            <div className="text-sm">请选择至少一条曲线来显示图表</div>
-          </div>
-        </div>
-      )}
-
       {!isChartReady && (
         <div className="absolute inset-0 flex items-center justify-center bg-[#151515] rounded-xl">
           <div className="text-center text-[#666]">
@@ -1301,4 +1122,8 @@ export default function InvestmentChart({
       )}
     </div>
   );
-}
+});
+
+InvestmentChart.displayName = 'InvestmentChart';
+
+export default InvestmentChart;
